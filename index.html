@@ -219,7 +219,7 @@ nav.tabs .pair-btn{margin-left:auto;align-self:center;background:var(--accent);c
       <div class="set-body">
         <div class="chips" id="sit-chips"></div>
         <div class="set-row">
-          <label>난이도 <select id="sel-level"><option value="상급">상급</option><option value="최상급">최상급</option></select></label>
+          <label>난이도 <select id="sel-level"><option value="초급">초급</option><option value="중급">중급</option><option value="상급">상급</option><option value="최상급">최상급</option></select></label>
           <label>복습 저장 기준 <select id="sel-th"><option value="60">60점 미만</option><option value="70">70점 미만</option><option value="80">80점 미만</option><option value="90">90점 미만</option></select></label>
         </div>
         <div class="set-row">
@@ -518,7 +518,7 @@ function targetIndex(item) { return item.lines.findIndex(l => l.target); }
 function renderExercise(showEn = false) {
   const { item, source, reviewId } = S.current;
   const rv = source === "review" ? S.reviews.find(r => r.id === reviewId) : null;
-  let tags = `<span class="tag">${esc(item.situation)}</span>`;
+  let tags = `<span class="tag">${esc(item.situation)}</span><span class="tag">${esc(levelOf(item))}</span>`;
   if (rv) tags += `<span class="tag review">복습 · 지난 점수 ${rv.lastScore}점</span>`;
   if (source === "starter") tags += `<span class="tag">예시 대화</span>`;
   $("#scene").innerHTML = tags + `<p>${esc(item.scene)}</p>`;
@@ -575,21 +575,51 @@ function pickSituation() {
   return from[Math.floor(Math.random() * from.length)];
 }
 
+const LEVELS = {
+  "초급": {
+    learner: "Korean adults at a beginner level (they know basic grammar and everyday vocabulary)",
+    lines: "3 to 5 lines", len: "ONE short sentence, about 10–25 Korean characters",
+    target: "Keep the target simple and practical: a basic request, question, preference, plan or reason (e.g. would like, can I, I'm going to, because). Everyday vocabulary only; no idioms.",
+    model: "natural spoken English that uses simple, common words a beginner can reuse — never stiff textbook English, but no rare idioms",
+    explain: "아주 쉬운 한국어로, 문법 용어는 최소로"
+  },
+  "중급": {
+    learner: "Korean adults at an intermediate level",
+    lines: "4 to 6 lines", len: "1 sentence, about 18–45 Korean characters",
+    target: "The target should practice common real-life patterns: polite requests, common phrasal verbs, present perfect, conditionals with if/when, connectors like although or so that. Common collocations, no rare idioms.",
+    model: "natural spoken English with common phrasal verbs and collocations an intermediate learner should learn next",
+    explain: "쉬운 한국어로"
+  },
+  "상급": {
+    learner: "university-educated Korean professionals",
+    lines: "4 to 7 lines", len: "1–2 sentences, about 25–70 Korean characters",
+    target: "Make the target clearly beyond textbook level: it should call for idiomatic phrasing, phrasal verbs, polite hedging or natural collocations that educated native speakers use.",
+    model: "what a college-educated native speaker would naturally say",
+    explain: "한국어로"
+  },
+  "최상급": {
+    learner: "university-educated Korean professionals aiming for near-native English",
+    lines: "4 to 7 lines", len: "1–2 sentences, about 25–70 Korean characters",
+    target: "Make the target demanding: layered nuance (tactful refusal, diplomatic disagreement, conditional or hypothetical framing, implied meaning, idioms) that a merely literal translation would get wrong.",
+    model: "what a college-educated native speaker would naturally say",
+    explain: "한국어로"
+  }
+};
+const levelOf = item => LEVELS[item?.level] ? item.level : "상급";  // items saved before levels existed were 상급
+
 function genPrompt(sit) {
   const avoid = S.stats.recent.slice(-15).map(r => "- " + r.split("|")[1]).join("\n") || "(없음)";
-  const hard = S.settings.level === "최상급"
-    ? "Make the target demanding: layered nuance (tactful refusal, diplomatic disagreement, conditional or hypothetical framing, implied meaning, idioms) that a merely literal translation would get wrong."
-    : "Make the target clearly beyond textbook level: it should call for idiomatic phrasing, phrasal verbs, polite hedging or natural collocations that educated native speakers use.";
-  return `You write material for a Korean→English composition drill for university-educated Korean professionals.
+  const L = LEVELS[S.settings.level] || LEVELS["상급"];
+  return `You write material for a Korean→English composition drill for ${L.learner}.
 
 Create ONE realistic dialogue in Korean set in this kind of place: ${sit}. Invent a specific, everyday scene there (a concrete problem, request, negotiation, small talk with a purpose, complaint, arrangement, etc.).
 
 Requirements:
-- 4 to 7 lines, 2 or 3 speakers, natural spoken Korean exactly as educated adults talk (honorifics appropriate to the relationship).
-- Exactly ONE line is the translation target ("target": true). It must NOT be the first or last line. It is 1–2 sentences, about 25–70 Korean characters.
-- ${hard}
+- ${L.lines}, 2 or 3 speakers, natural spoken Korean exactly as adults talk (honorifics appropriate to the relationship).
+- Exactly ONE line is the translation target ("target": true). It must NOT be the first or last line. It is ${L.len}.
+- ${L.target}
 - The surrounding lines must give enough context to translate the target precisely.
-- "en" for every line: how a college-educated native speaker would naturally say it in this situation.
+- "en" for every line: ${L.model}, in this situation.
 - Scenes recently used — do NOT repeat them:
 ${avoid}
 
@@ -616,6 +646,7 @@ async function generateNew() {
     const raw = await S.sample.json(genPrompt(sit), { cache: false, signal: S.ctl.signal });
     const item = validItem(raw);
     if (!item) throw { code: "invalid_json" };
+    item.level = LEVELS[S.settings.level] ? S.settings.level : "상급";
     S.current = { item, source: "new" };
     S.stats.recent = [...S.stats.recent, `${item.situation}|${item.scene}`].slice(-20);
     saveLocal();
@@ -684,7 +715,8 @@ function gradePrompt(item, answer) {
     const role = item.speakers?.[l.speaker] || l.speaker;
     return l.target ? `${role}: ${l.ko}   ← TARGET` : `${role}: ${l.ko}  (EN: ${l.en})`;
   }).join("\n");
-  return `You are a demanding but encouraging English writing coach for advanced Korean learners (university graduates).
+  const lv = levelOf(item), L = LEVELS[lv];
+  return `You are a demanding but encouraging English writing coach. The learner: ${L.learner} (level: ${lv}).
 
 Scene: ${item.situation} — ${item.scene}
 Dialogue:
@@ -693,7 +725,7 @@ ${ctx}
 Target Korean line: "${t.ko}"
 Learner's English: """${answer}"""
 
-Judge how well the learner's sentence conveys the target's meaning, nuance and register IN THIS CONTEXT, measured against what a college-educated native speaker would naturally say.
+Judge how well the learner's sentence conveys the target's meaning, nuance and register IN THIS CONTEXT, measured against natural native English. The model answer must be ${L.model}. Write every Korean explanation ${L.explain}.
 
 Scoring (total 0–100):
 - meaning 0–40: every element of the Korean is conveyed, nothing added or distorted
