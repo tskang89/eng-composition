@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>대화 영작 훈련</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: one reading column — scene, chat-style dialogue with the target line marked like a highlighter, answer box, then the coach's report. */
+:root{
+  --bg:#eceff3; --surface:#ffffff; --ink:#1a2132; --muted:#5b6476; --line:#d5dae3;
+  --accent:#2a46c4; --accent-ink:#ffffff; --soft:#e3e8f7;
+  --mark:#ffe55c; --mark-ink:#1a2132;
+  --good:#1d7a4b; --warn:#a96400; --bad:#b3302d;
+  --bubble:#f3f5f9; --bubble-me:#e6ebfa;
+  --f-ko:"Gowun Batang","Noto Serif KR",serif;
+  --f-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-en:"Source Serif 4",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10131a; --surface:#181c26; --ink:#e6e9f0; --muted:#9aa2b2; --line:#2a3040;
+  --accent:#8fa3ff; --accent-ink:#0c0f1c; --soft:#222a42;
+  --mark:#4d4413; --mark-ink:#fff2a8;
+  --good:#5ccf93; --warn:#f0b04a; --bad:#ff7f78;
+  --bubble:#1f2431; --bubble-me:#232c48; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#10131a; --surface:#181c26; --ink:#e6e9f0; --muted:#9aa2b2; --line:#2a3040;
+  --accent:#8fa3ff; --accent-ink:#0c0f1c; --soft:#222a42;
+  --mark:#4d4413; --mark-ink:#fff2a8;
+  --good:#5ccf93; --warn:#f0b04a; --bad:#ff7f78;
+  --bubble:#1f2431; --bubble-me:#232c48; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.6;padding-inline:16px;padding-block:20px 48px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+button{font:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.brand h1{margin:0;font-family:var(--f-ko);font-size:1.7rem;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:.86rem}
+.stats{display:flex;gap:18px;font-variant-numeric:tabular-nums}
+.stat{display:flex;flex-direction:column;align-items:flex-end}
+.stat b{font-size:1.15rem;font-weight:600}
+.stat span{font-size:.72rem;color:var(--muted);letter-spacing:.04em}
+
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+nav.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;color:var(--muted);font-weight:500;margin-bottom:-1px}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.count{display:inline-block;min-width:1.4em;padding:0 6px;margin-left:4px;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.75rem;text-align:center}
+
+details.settings{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+details.settings summary{cursor:pointer;color:var(--muted);font-size:.88rem}
+.set-body{display:flex;flex-direction:column;gap:12px;padding-top:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:3px 12px;font-size:.84rem}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.set-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:.86rem;color:var(--muted)}
+.set-row label{display:flex;gap:8px;align-items:center}
+select{font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:16px}
+.scene{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:baseline}
+.tag{font-size:.75rem;font-weight:600;letter-spacing:.06em;padding:2px 9px;border-radius:5px;background:var(--soft);color:var(--accent)}
+.tag.review{background:var(--mark);color:var(--mark-ink)}
+.scene p{margin:0;color:var(--muted);font-size:.9rem;flex:1 1 260px;min-width:0}
+
+.dialogue{display:flex;flex-direction:column;gap:10px}
+.line{display:flex;flex-direction:column;max-width:88%;gap:3px}
+.line.me{align-self:flex-end;align-items:flex-end}
+.who{font-size:.74rem;color:var(--muted);letter-spacing:.03em}
+.bubble{font-family:var(--f-ko);font-size:1.05rem;line-height:1.7;background:var(--bubble);padding:9px 14px;border-radius:12px;min-width:0;overflow-wrap:anywhere}
+.line.me .bubble{background:var(--bubble-me)}
+.line.target .bubble{background:var(--surface);border:1.5px dashed var(--accent);font-weight:700}
+.line.target .bubble mark{background:linear-gradient(transparent 38%,var(--mark) 38%,var(--mark) 92%,transparent 92%);color:var(--mark-ink);padding:0 2px}
+.line .en{font-family:var(--f-en);font-style:italic;font-size:.92rem;color:var(--muted);padding:0 4px}
+.target-label{font-size:.72rem;font-weight:600;color:var(--accent);letter-spacing:.06em}
+
+.hint{font-size:.88rem;color:var(--muted);background:var(--bubble);border-radius:8px;padding:8px 12px}
+.answer-area{display:flex;flex-direction:column;gap:8px}
+.answer-area label{font-size:.84rem;font-weight:500}
+textarea{width:100%;min-height:96px;resize:vertical;font-family:var(--f-en);font-size:1.08rem;line-height:1.55;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+textarea:disabled{opacity:.75}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 16px;font-weight:500}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.kbd{font-size:.76rem;color:var(--muted);margin-left:auto}
+.status{font-size:.88rem;color:var(--muted);display:flex;align-items:center;gap:8px}
+.status.err{color:var(--bad)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.dot{animation:none}}
+
+.result{display:flex;flex-direction:column;gap:18px;border-top:1px solid var(--line);padding-top:18px}
+.score-row{display:flex;flex-wrap:wrap;gap:20px;align-items:center}
+.ring{width:112px;height:112px;flex:none}
+.ring text{font-family:var(--f-ui);font-variant-numeric:tabular-nums}
+.score-meta{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.summary{font-family:var(--f-ko);font-size:1.05rem;margin:0}
+.bars{display:grid;grid-template-columns:auto 1fr auto;gap:5px 10px;align-items:center;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{height:6px;background:var(--bubble);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.block h3{margin:0 0 6px;font-size:.78rem;font-weight:600;letter-spacing:.08em;color:var(--muted)}
+.model{font-family:var(--f-en);font-size:1.2rem;line-height:1.55;margin:0;padding:12px 14px;border-left:3px solid var(--good);background:var(--bubble);border-radius:0 8px 8px 0}
+.mine{font-family:var(--f-en);font-size:1.02rem;margin:0;color:var(--muted)}
+.alts{margin:0;padding-left:18px;font-family:var(--f-en);font-size:1rem}
+.issues{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.issues li{padding:10px 12px;border:1px solid var(--line);border-radius:8px}
+.fix{font-family:var(--f-en);font-size:1rem;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
+.fix del{color:var(--bad);text-decoration-thickness:1.5px}
+.fix ins{color:var(--good);text-decoration:none;font-weight:600}
+.issues p{margin:4px 0 0;font-size:.9rem}
+.exprs{display:grid;grid-template-columns:minmax(0,auto) 1fr;gap:6px 14px;margin:0;font-size:.9rem}
+.exprs dt{font-family:var(--f-en);font-weight:600}
+.exprs dd{margin:0;color:var(--muted)}
+.note{font-size:.86rem;padding:8px 12px;border-radius:8px;background:var(--soft)}
+.note.save{background:var(--mark);color:var(--mark-ink)}
+
+.review-list{display:flex;flex-direction:column;gap:10px}
+.rv{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.rv-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.8rem;color:var(--muted)}
+.rv-score{font-weight:600;font-variant-numeric:tabular-nums}
+.rv-ko{font-family:var(--f-ko);font-size:1.02rem;margin:0}
+.rv details{font-size:.9rem}
+.rv details p{font-family:var(--f-en);margin:4px 0}
+.empty{color:var(--muted);text-align:center;padding:32px 12px;background:var(--surface);border:1px dashed var(--line);border-radius:12px}
+.copy-row{display:flex;gap:8px;align-items:center;margin-top:6px}
+.small{font-size:.8rem;padding:4px 10px}
+@media (max-width:520px){.line{max-width:100%}.stats{gap:12px}.kbd{display:none}}
+[hidden]{display:none!important}
+.keybox{background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.keybox h2{margin:0;font-size:1rem}
+.keybox p{margin:0;font-size:.86rem;color:var(--muted)}
+.keyrow{display:flex;flex-wrap:wrap;gap:8px}
+.keyrow input{flex:1 1 260px;min-width:0;font:inherit;font-family:ui-monospace,Consolas,monospace;font-size:.88rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.keybox a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>대화 영작 훈련</h1>
+      <p>대화 속 한 문장을 영어로. 원어민 모범 답안과 100점 만점 채점.</p>
+    </div>
+    <div class="stats" aria-label="학습 현황">
+      <div class="stat"><b id="st-n">0</b><span>푼 문제</span></div>
+      <div class="stat"><b id="st-avg">–</b><span>평균 점수</span></div>
+      <div class="stat"><b id="st-rv">0</b><span>복습 대기</span></div>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button id="tab-practice" role="tab" aria-selected="true">연습</button>
+    <button id="tab-review" role="tab" aria-selected="false">복습 노트<span class="count" id="rv-count">0</span></button>
+  </nav>
+
+  <section id="panel-practice" style="display:flex;flex-direction:column;gap:14px">
+    <div class="keybox" id="keybox" hidden>
+      <h2>Anthropic API 키를 입력하세요</h2>
+      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다.</p>
+      <div class="keyrow">
+        <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+        <button class="btn primary" id="btn-key">저장하고 시작</button>
+      </div>
+    </div>
+    <details class="settings">
+      <summary>상황·난이도·API 설정</summary>
+      <div class="set-body">
+        <div class="chips" id="sit-chips"></div>
+        <div class="set-row">
+          <label>난이도 <select id="sel-level"><option value="상급">상급</option><option value="최상급">최상급</option></select></label>
+          <label>복습 저장 기준 <select id="sel-th"><option value="60">60점 미만</option><option value="70">70점 미만</option><option value="80">80점 미만</option><option value="90">90점 미만</option></select></label>
+        </div>
+        <div class="set-row">
+          <label>모델 <select id="sel-model">
+            <option value="claude-opus-5-5">Claude Opus 5.5 (품질 우선)</option>
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (절반 가격)</option>
+            <option value="claude-haiku-4-5">Claude Haiku 4.5 (가장 저렴·빠름)</option>
+          </select></label>
+          <button class="btn small" id="btn-key-reset">API 키 바꾸기</button>
+        </div>
+      </div>
+    </details>
+
+    <article class="card" id="card">
+      <div class="scene" id="scene"></div>
+      <div class="dialogue" id="dialogue"></div>
+      <div class="hint" id="hint" hidden></div>
+      <div class="answer-area">
+        <label for="answer">하이라이트된 문장을 영어로 써 보세요</label>
+        <textarea id="answer" spellcheck="false" autocomplete="off" placeholder="Type your English here…"></textarea>
+        <div class="actions">
+          <button class="btn primary" id="btn-submit">채점하기</button>
+          <button class="btn" id="btn-hint">힌트</button>
+          <button class="btn" id="btn-next">다음 문제</button>
+          <button class="btn ghost" id="btn-stop" hidden>중지</button>
+          <span class="kbd">Ctrl + Enter 로 제출</span>
+        </div>
+        <div class="status" id="status" hidden></div>
+      </div>
+      <div class="result" id="result" hidden></div>
+    </article>
+  </section>
+
+  <section id="panel-review" hidden>
+    <div class="review-list" id="review-list"></div>
+  </section>
+</div>
+
+<script>
+const SITUATIONS = ["회사","식당","공항","상점","파티","관공서","병원","은행","호텔","부동산","학교·학부모","이웃","고객센터 전화","택시·대중교통","헬스장","미용실"];
+
+const STARTERS = [
+  {situation:"회사",scene:"분기 실적 회의 직후, 팀장이 일정이 빠듯한 보고서를 부탁한다.",speakers:{A:"김 팀장",B:"나 (대리)"},me:"A",
+   focus:"'초안부터 잡다', '들어오는 대로 반영하다'를 자연스러운 업무 영어로.",
+   lines:[
+    {speaker:"A",ko:"오늘 회의에서 나온 숫자들, 금요일까지 보고서로 정리해 줄 수 있어요?",en:"Could you pull today's numbers together into a report by Friday?"},
+    {speaker:"B",ko:"네, 가능합니다. 다만 재무팀 자료가 아직 안 들어와서요.",en:"Sure, I can do that. The thing is, we're still waiting on Finance's figures."},
+    {speaker:"A",ko:"그럼 일단 있는 자료로 초안부터 잡고, 재무팀 숫자는 들어오는 대로 반영하는 걸로 하죠.",en:"Then start drafting with what we have, and work Finance's numbers in as they come in.",target:true},
+    {speaker:"B",ko:"알겠습니다. 목요일 오후에 중간 점검 한번 받을게요.",en:"Got it. I'll check in with you Thursday afternoon to show you where it stands."}]},
+  {situation:"식당",scene:"레스토랑에서 메인 요리가 한참 늦게 나와 직원에게 이야기한다.",speakers:{A:"손님",B:"직원"},me:"A",
+   focus:"불평을 하되 공격적이지 않게. '너무 늦게 나와서 ~해 버렸다'의 결과 표현.",
+   lines:[
+    {speaker:"B",ko:"식사는 입에 맞으세요?",en:"Is everything to your liking?"},
+    {speaker:"A",ko:"음식은 맛있는데, 메인 요리가 너무 늦게 나와서 일행이 먼저 다 먹어 버렸어요.",en:"The food's lovely, but my main took so long that everyone else had already finished.",target:true},
+    {speaker:"B",ko:"정말 죄송합니다. 주방에 확인해 보고, 디저트는 저희가 서비스로 드릴게요.",en:"I'm so sorry. Let me check with the kitchen, and dessert is on us."},
+    {speaker:"A",ko:"그렇게까지 안 하셔도 되는데, 신경 써 주셔서 감사해요.",en:"You really don't have to, but thank you for taking care of it."}]},
+  {situation:"공항",scene:"첫 비행편이 지연되어 환승편을 놓칠 상황. 탑승구 직원에게 묻는다.",speakers:{A:"승객",B:"항공사 직원"},me:"A",
+   focus:"'원래도 빠듯했는데', '이대로면'의 뉘앙스를 살릴 것.",
+   lines:[
+    {speaker:"A",ko:"프랑크푸르트행 연결편 탑승권을 받았는데, 이 비행기가 40분 지연됐다고 해서요.",en:"I've got a boarding pass for my connection to Frankfurt, but I hear this flight's delayed by 40 minutes."},
+    {speaker:"B",ko:"환승 시간이 얼마나 되시죠?",en:"How long is your layover?"},
+    {speaker:"A",ko:"원래도 한 시간밖에 안 돼서 빠듯했는데, 이대로면 연결편은 못 탈 것 같아요.",en:"It was only an hour to begin with, which was already tight, so at this rate I don't think I'll make it.",target:true},
+    {speaker:"B",ko:"혹시 모르니 다음 편에 미리 자리를 잡아 둘게요.",en:"Let me hold a seat for you on the next flight, just in case."}]},
+  {situation:"관공서",scene:"구청 민원 창구에서 체류 관련 서류를 냈는데 하나가 문제라고 한다.",speakers:{A:"민원인",B:"담당 공무원"},me:"A",
+   focus:"공손한 허락 구하기. '~만 나중에 보내 드려도 될까요?'",
+   lines:[
+    {speaker:"B",ko:"재직증명서는 발급일이 3개월 이내여야 해서, 이건 접수가 안 됩니다.",en:"The employment certificate has to be issued within the last three months, so I can't accept this one."},
+    {speaker:"A",ko:"아, 그건 몰랐네요.",en:"Oh, I didn't realize that."},
+    {speaker:"A",ko:"다른 서류에 문제가 없으면, 그것만 나중에 이메일로 보내 드려도 될까요?",en:"If everything else is in order, would it be all right if I emailed that one over later?",target:true},
+    {speaker:"B",ko:"죄송하지만 원본을 직접 가지고 오셔야 해요.",en:"I'm afraid you'll need to bring the original in person."}]}
+];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const clone = o => JSON.parse(JSON.stringify(o));
+
+const S = {
+  sample: null, col: null,
+  reviews: [], stats: { attempts: 0, total: 0, recent: [] },
+  settings: Object.assign({ threshold: 70, level: "상급", situations: [], model: "claude-opus-5-5" }, lsGet("ew_settings", {})),
+  current: null,   // {item, source:'starter'|'new'|'review', reviewId}
+  phase: "answering", ctl: null, counter: 0, graded: null, rvConfirm: null
+};
+
+/* ---------- storage: this browser's localStorage ---------- */
+const store = {
+  load() { S.reviews = lsGet("ew_reviews", []); S.stats = Object.assign(S.stats, lsGet("ew_stats", {})); },
+  async putReview() { lsSet("ew_reviews", S.reviews); },
+  async delReview() { lsSet("ew_reviews", S.reviews); },
+  async putStats() { lsSet("ew_stats", S.stats); }
+};
+
+/* ---------- Claude API (direct from the browser with the user's own key) ---------- */
+const getKey = () => { try { return localStorage.getItem("ew_api_key") || ""; } catch { return ""; } };
+const setKey = k => { try { k ? localStorage.setItem("ew_api_key", k) : localStorage.removeItem("ew_api_key"); } catch {} };
+
+function parseJSONLoose(t) {
+  try { return JSON.parse(t); } catch {}
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) try { return JSON.parse(fence[1]); } catch {}
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a >= 0 && b > a) try { return JSON.parse(t.slice(a, b + 1)); } catch {}
+  throw { code: "invalid_json" };
+}
+
+const claudeApi = {
+  async json(prompt, { signal } = {}) {
+    const key = getKey();
+    if (!key) throw { code: "no_key" };
+    const model = S.settings.model;
+    const body = {
+      model, max_tokens: 16000,
+      messages: [{ role: "user", content: prompt + "\n\nReply with the JSON only." }]
+    };
+    const headers = {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    };
+    if (model !== "claude-haiku-4-5") body.output_config = { effort: "low" };
+    if (model === "claude-opus-5-5" || model === "claude-sonnet-5-5") {
+      body.fallbacks = "default";
+      headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
+    }
+    let res;
+    try { res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body), signal }); }
+    catch (e) { throw { code: e?.name === "AbortError" ? "cancelled" : "network" }; }
+    let data = null; try { data = await res.json(); } catch {}
+    if (!res.ok) {
+      const code = res.status === 401 ? "bad_key" : res.status === 429 ? "rate_limited" : res.status === 400 && /credit/i.test(data?.error?.message || "") ? "no_credit" : res.status >= 500 || res.status === 529 ? "upstream_error" : "api_error";
+      throw { code, message: data?.error?.message || ("HTTP " + res.status) };
+    }
+    if (data?.stop_reason === "refusal") throw { code: "refused" };
+    const text = (data?.content || []).filter(c => c.type === "text").map(c => c.text).join("");
+    if (!text.trim()) throw { code: "empty_completion" };
+    return parseJSONLoose(text);
+  }
+};
+
+/* ---------- header / settings ---------- */
+function renderStats() {
+  $("#st-n").textContent = S.stats.attempts;
+  $("#st-avg").textContent = S.stats.attempts ? Math.round(S.stats.total / S.stats.attempts) : "–";
+  $("#st-rv").textContent = S.reviews.length;
+  $("#rv-count").textContent = S.reviews.length;
+}
+function renderSettings() {
+  const box = $("#sit-chips"); box.innerHTML = "";
+  const all = !S.settings.situations.length;
+  const mk = (label, pressed, fn) => { const b = document.createElement("button"); b.className = "chip"; b.textContent = label; b.setAttribute("aria-pressed", pressed); b.onclick = fn; box.append(b); };
+  mk("전체", all, () => { S.settings.situations = []; saveSettings(); });
+  SITUATIONS.forEach(s => mk(s, S.settings.situations.includes(s), () => {
+    const a = S.settings.situations;
+    S.settings.situations = a.includes(s) ? a.filter(x => x !== s) : [...a, s];
+    saveSettings();
+  }));
+  $("#sel-level").value = S.settings.level;
+  $("#sel-th").value = String(S.settings.threshold);
+}
+function saveSettings() { lsSet("ew_settings", S.settings); renderSettings(); }
+$("#sel-level").onchange = e => { S.settings.level = e.target.value; saveSettings(); };
+$("#sel-th").onchange = e => { S.settings.threshold = +e.target.value; saveSettings(); };
+
+/* ---------- exercise rendering ---------- */
+function targetIndex(item) { return item.lines.findIndex(l => l.target); }
+
+function renderExercise(showEn = false) {
+  const { item, source, reviewId } = S.current;
+  const rv = source === "review" ? S.reviews.find(r => r.id === reviewId) : null;
+  let tags = `<span class="tag">${esc(item.situation)}</span>`;
+  if (rv) tags += `<span class="tag review">복습 · 지난 점수 ${rv.lastScore}점</span>`;
+  if (source === "starter") tags += `<span class="tag">예시 대화</span>`;
+  $("#scene").innerHTML = tags + `<p>${esc(item.scene)}</p>`;
+
+  const me = item.me || item.lines[targetIndex(item)]?.speaker;
+  $("#dialogue").innerHTML = item.lines.map(l => {
+    const role = item.speakers?.[l.speaker] || l.speaker;
+    const cls = ["line", l.speaker === me ? "me" : "", l.target ? "target" : ""].join(" ");
+    const body = l.target ? `<mark>${esc(l.ko)}</mark>` : esc(l.ko);
+    const label = l.target ? `<span class="target-label">▼ 영작할 문장 · ${esc(role)}</span>` : `<span class="who">${esc(role)}</span>`;
+    const en = showEn && !l.target && l.en ? `<span class="en">${esc(l.en)}</span>` : "";
+    return `<div class="${cls}">${label}<div class="bubble">${body}</div>${en}</div>`;
+  }).join("");
+
+  $("#hint").hidden = true;
+  $("#hint").textContent = item.focus ? "힌트 · " + item.focus : "";
+  $("#btn-hint").hidden = !item.focus;
+}
+
+function setPhase(p, msg) {
+  S.phase = p;
+  const busy = p === "loading" || p === "grading";
+  $("#answer").disabled = busy || p === "graded";
+  $("#btn-submit").disabled = busy || p !== "answering";
+  $("#btn-next").disabled = busy;
+  $("#btn-hint").disabled = busy;
+  $("#btn-stop").hidden = !busy;
+  const st = $("#status");
+  if (busy) { st.hidden = false; st.className = "status"; st.innerHTML = `<span class="dot"></span>${esc(msg)}`; }
+  else if (p === "error") { st.hidden = false; st.className = "status err"; st.textContent = msg; }
+  else if (msg) { st.hidden = false; st.className = "status"; st.textContent = msg; }
+  else st.hidden = true;
+}
+
+function errCopy(e) {
+  return ({
+    no_key: "API 키가 없습니다. 위 입력란에 Anthropic API 키를 넣어 주세요.",
+    bad_key: "API 키가 올바르지 않습니다. 설정에서 ‘API 키 바꾸기’를 눌러 다시 입력해 주세요.",
+    no_credit: "API 계정의 크레딧이 부족합니다. Anthropic Console에서 충전한 뒤 다시 시도해 주세요.",
+    rate_limited: "요청이 많거나 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.",
+    network: "API 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.",
+    invalid_json: "응답 형식이 어긋났습니다. 한 번 더 시도해 주세요.",
+    refused: "이 요청에는 답을 받지 못했습니다. 다음 문제로 넘어가 주세요.",
+    api_error: "API 요청이 거절되었습니다" + (e?.message ? ": " + e.message : ".")
+  })[e?.code] || "일시적인 오류입니다. 다시 시도해 주세요.";
+}
+
+/* ---------- Claude: new dialogue ---------- */
+function pickSituation() {
+  const pool = S.settings.situations.length ? S.settings.situations : SITUATIONS;
+  const recentSits = S.stats.recent.slice(-3).map(r => r.split("|")[0]);
+  const fresh = pool.filter(s => !recentSits.includes(s));
+  const from = fresh.length ? fresh : pool;
+  return from[Math.floor(Math.random() * from.length)];
+}
+
+function genPrompt(sit) {
+  const avoid = S.stats.recent.slice(-15).map(r => "- " + r.split("|")[1]).join("\n") || "(없음)";
+  const hard = S.settings.level === "최상급"
+    ? "Make the target demanding: layered nuance (tactful refusal, diplomatic disagreement, conditional or hypothetical framing, implied meaning, idioms) that a merely literal translation would get wrong."
+    : "Make the target clearly beyond textbook level: it should call for idiomatic phrasing, phrasal verbs, polite hedging or natural collocations that educated native speakers use.";
+  return `You write material for a Korean→English composition drill for university-educated Korean professionals.
+
+Create ONE realistic dialogue in Korean set in this kind of place: ${sit}. Invent a specific, everyday scene there (a concrete problem, request, negotiation, small talk with a purpose, complaint, arrangement, etc.).
+
+Requirements:
+- 4 to 7 lines, 2 or 3 speakers, natural spoken Korean exactly as educated adults talk (honorifics appropriate to the relationship).
+- Exactly ONE line is the translation target ("target": true). It must NOT be the first or last line. It is 1–2 sentences, about 25–70 Korean characters.
+- ${hard}
+- The surrounding lines must give enough context to translate the target precisely.
+- "en" for every line: how a college-educated native speaker would naturally say it in this situation.
+- Scenes recently used — do NOT repeat them:
+${avoid}
+
+Return ONLY this JSON (no commentary):
+{"situation":"${sit}","scene":"한 문장 장면 설명 (한국어)","speakers":{"A":"역할 (한국어, 짧게)","B":"역할"},"me":"A or B — the speaker of the target line","lines":[{"speaker":"A","ko":"...","en":"...","target":false}],"focus":"이 문장에서 연습할 표현 포인트 (한국어, 1문장, 영어 정답 단어는 쓰지 말 것)"}`;
+}
+
+function validItem(x) {
+  if (!x || !Array.isArray(x.lines) || x.lines.length < 3) return null;
+  x.lines = x.lines.filter(l => l && l.ko).map(l => ({ speaker: String(l.speaker || "A"), ko: String(l.ko), en: String(l.en || ""), target: !!l.target }));
+  let t = x.lines.filter(l => l.target);
+  if (t.length !== 1) { x.lines.forEach(l => l.target = false); x.lines[Math.floor(x.lines.length / 2)].target = true; }
+  x.situation = String(x.situation || "기타"); x.scene = String(x.scene || "");
+  x.speakers = x.speakers && typeof x.speakers === "object" ? x.speakers : {};
+  x.me = x.lines.find(l => l.target).speaker;
+  return x;
+}
+
+async function generateNew() {
+  const sit = pickSituation();
+  S.ctl = new AbortController();
+  setPhase("loading", `Claude가 ‘${sit}’ 상황의 대화를 만드는 중…`);
+  try {
+    const raw = await S.sample.json(genPrompt(sit), { cache: false, signal: S.ctl.signal });
+    const item = validItem(raw);
+    if (!item) throw { code: "invalid_json" };
+    S.current = { item, source: "new" };
+    S.stats.recent = [...S.stats.recent, `${item.situation}|${item.scene}`].slice(-20);
+    lsSet("ew_stats", S.stats);
+    showFreshExercise();
+  } catch (e) {
+    if (e?.code === "cancelled") { setPhase(S.graded ? "graded" : "answering"); return; }
+    setPhase("error", errCopy(e) + " ‘다음 문제’를 다시 눌러 주세요.");
+    $("#btn-next").disabled = false;
+  }
+}
+
+function showFreshExercise() {
+  S.graded = null;
+  $("#result").hidden = true; $("#result").innerHTML = "";
+  $("#answer").value = "";
+  renderExercise(false);
+  setPhase("answering");
+  $("#answer").focus({ preventScroll: true });
+  $("#card").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function showReview(rv) {
+  S.current = { item: clone(rv.item), source: "review", reviewId: rv.id };
+  switchTab("practice");
+  showFreshExercise();
+}
+
+async function next() {
+  if (S.phase === "loading" || S.phase === "grading") return;
+  S.counter++;
+  const queue = S.reviews.slice().sort((a, b) => (a.lastSeen || 0) - (b.lastSeen || 0));
+  const curId = S.current?.reviewId;
+  const cand = queue.find(r => r.id !== curId);
+  if (cand && (S.counter % 3 === 0 || !S.sample)) return showReview(cand);
+  if (!S.sample) {
+    const others = STARTERS.filter(s => s !== S.current?.item);
+    S.current = { item: others[Math.floor(Math.random() * others.length)], source: "starter" };
+    showFreshExercise();
+    setPhase("error", "API 키가 없어 예시 대화만 보여 드립니다. 위에 키를 넣으면 Claude가 새 대화를 만들고 채점합니다.");
+    return;
+  }
+  generateNew();
+}
+
+/* ---------- Claude: grading ---------- */
+function gradePrompt(item, answer) {
+  const t = item.lines[targetIndex(item)];
+  const ctx = item.lines.map(l => {
+    const role = item.speakers?.[l.speaker] || l.speaker;
+    return l.target ? `${role}: ${l.ko}   ← TARGET` : `${role}: ${l.ko}  (EN: ${l.en})`;
+  }).join("\n");
+  return `You are a demanding but encouraging English writing coach for advanced Korean learners (university graduates).
+
+Scene: ${item.situation} — ${item.scene}
+Dialogue:
+${ctx}
+
+Target Korean line: "${t.ko}"
+Learner's English: """${answer}"""
+
+Judge how well the learner's sentence conveys the target's meaning, nuance and register IN THIS CONTEXT, measured against what a college-educated native speaker would naturally say.
+
+Scoring (total 0–100):
+- meaning 0–40: every element of the Korean is conveyed, nothing added or distorted
+- naturalness 0–30: idiomatic word choice and collocation; sounds like a native, not a translation
+- grammar 0–20: grammar, articles, tense, prepositions, punctuation
+- register 0–10: politeness and tone fit the relationship and setting
+Calibration: 90+ = native-level and natural; 75–89 = correct but noticeably non-native in places; 60–74 = understandable with clear errors or awkwardness; below 60 = meaning lost or serious errors. Do not inflate. If the answer is empty, in Korean, or unrelated, score below 20.
+
+Return ONLY this JSON:
+{"score":0,"breakdown":{"meaning":0,"naturalness":0,"grammar":0,"register":0},
+"model_answer":"the single most natural native rendering for this context",
+"alternatives":["another natural way","a more casual or more formal way (say which in parentheses)"],
+"summary":"한 줄 총평 (한국어)",
+"issues":[{"original":"exact phrase from the learner","better":"improved phrase","why":"왜 고쳐야 하는지 한국어로 1–2문장"}],
+"key_expressions":[{"en":"useful expression from the model answer","ko":"뜻과 쓰임 (한국어, 짧게)"}]}
+issues: up to 5, most important first; [] if there is nothing to fix. key_expressions: 2–4 items.`;
+}
+
+async function submit() {
+  if (S.phase !== "answering") return;
+  const answer = $("#answer").value.trim();
+  if (!answer) { setPhase("answering", "영어 문장을 입력한 뒤 채점하기를 눌러 주세요."); $("#answer").focus(); return; }
+  if (!S.sample) { const st = $("#status"); st.hidden = false; st.className = "status err"; st.textContent = "채점하려면 먼저 위 입력란에 Anthropic API 키를 넣어 주세요."; $("#key-input").focus(); return; }
+  S.ctl = new AbortController();
+  setPhase("grading", "Claude가 채점하는 중…");
+  try {
+    const g = await S.sample.json(gradePrompt(S.current.item, answer), { cache: false, signal: S.ctl.signal });
+    const score = Math.max(0, Math.min(100, Math.round(Number(g?.score))));
+    if (!Number.isFinite(score) || !g?.model_answer) throw { code: "invalid_json" };
+    g.score = score;
+    S.graded = { g, answer };
+    const note = await recordResult(score, answer, g);
+    renderResult(g, answer, note);
+    setPhase("graded");
+    renderExercise(true);
+    $("#btn-next").focus({ preventScroll: true });
+  } catch (e) {
+    if (e?.code === "cancelled") { setPhase("answering"); return; }
+    setPhase("answering");
+    const st = $("#status"); st.hidden = false; st.className = "status err"; st.textContent = errCopy(e);
+  }
+}
+
+async function recordResult(score, answer, g) {
+  S.stats.attempts++; S.stats.total += score;
+  const th = S.settings.threshold, now = Date.now();
+  const { source, reviewId, item } = S.current;
+  let note = null;
+  if (source === "review") {
+    const i = S.reviews.findIndex(r => r.id === reviewId);
+    if (i >= 0) {
+      if (score >= th) { S.reviews.splice(i, 1); await store.delReview(reviewId); note = { kind: "pass", text: `${th}점을 넘겨 복습 노트에서 뺐습니다.` }; }
+      else {
+        const r = S.reviews[i];
+        Object.assign(r, { lastScore: score, lastAnswer: answer, modelAnswer: g.model_answer, attempts: (r.attempts || 1) + 1, lastSeen: now });
+        await store.putReview(r);
+        note = { kind: "save", text: `아직 ${th}점 미만이라 복습 노트에 남겨 둡니다. 나중에 다시 나옵니다.` };
+      }
+    }
+  } else if (score < th) {
+    const r = { id: "rv_" + now.toString(36) + Math.random().toString(36).slice(2, 6), item: clone(item), lastScore: score, lastAnswer: answer, modelAnswer: g.model_answer, attempts: 1, savedAt: now, lastSeen: now };
+    S.reviews.push(r);
+    await store.putReview(r);
+    note = { kind: "save", text: `${th}점 미만이라 복습 노트에 저장했습니다. 몇 문제 뒤에 다시 나옵니다.` };
+  }
+  await store.putStats();
+  renderStats(); renderReviewList();
+  return note;
+}
+
+function scoreColor(s) { return s >= 85 ? "var(--good)" : s >= 65 ? "var(--warn)" : "var(--bad)"; }
+
+function renderResult(g, answer, note) {
+  const s = g.score, C = 2 * Math.PI * 46, col = scoreColor(s);
+  const b = g.breakdown || {};
+  const bar = (k, label, max) => {
+    const v = Math.max(0, Math.min(max, Number(b[k]) || 0));
+    return `<span>${label}</span><span class="bar"><i style="width:${(v / max) * 100}%"></i></span><span>${v}/${max}</span>`;
+  };
+  const alts = (g.alternatives || []).filter(Boolean);
+  const issues = (g.issues || []).filter(i => i && (i.better || i.why));
+  const exprs = (g.key_expressions || []).filter(x => x && x.en);
+  $("#result").innerHTML = `
+    <div class="score-row">
+      <svg class="ring" viewBox="0 0 112 112" role="img" aria-label="점수 ${s}점">
+        <circle cx="56" cy="56" r="46" fill="none" stroke="var(--bubble)" stroke-width="10"/>
+        <circle cx="56" cy="56" r="46" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round"
+          stroke-dasharray="${(C * s / 100).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 56 56)"/>
+        <text x="56" y="60" text-anchor="middle" font-size="30" font-weight="600" fill="var(--ink)">${s}</text>
+        <text x="56" y="80" text-anchor="middle" font-size="11" fill="var(--muted)">/ 100</text>
+      </svg>
+      <div class="score-meta">
+        <p class="summary">${esc(g.summary || "")}</p>
+        <div class="bars">${bar("meaning", "의미 전달", 40)}${bar("naturalness", "자연스러움", 30)}${bar("grammar", "문법·어법", 20)}${bar("register", "어조·격식", 10)}</div>
+      </div>
+    </div>
+    ${note ? `<div class="note ${note.kind === "save" ? "save" : ""}">${esc(note.text)}</div>` : ""}
+    <div class="block"><h3>모범 답안</h3><p class="model" id="model">${esc(g.model_answer)}</p>
+      <div class="copy-row"><button class="btn small" id="btn-copy">복사</button></div></div>
+    ${alts.length ? `<div class="block"><h3>이렇게도 말합니다</h3><ul class="alts">${alts.map(a => `<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
+    <div class="block"><h3>내 답안</h3><p class="mine">${esc(answer)}</p></div>
+    <div class="block"><h3>고칠 점</h3>${issues.length ? `<ul class="issues">${issues.map(i => `
+      <li><div class="fix">${i.original ? `<del>${esc(i.original)}</del><span aria-hidden="true">→</span>` : ""}<ins>${esc(i.better || "")}</ins></div><p>${esc(i.why || "")}</p></li>`).join("")}</ul>` : `<p class="mine">크게 고칠 곳이 없습니다.</p>`}</div>
+    ${exprs.length ? `<div class="block"><h3>기억할 표현</h3><dl class="exprs">${exprs.map(x => `<dt>${esc(x.en)}</dt><dd>${esc(x.ko || "")}</dd>`).join("")}</dl></div>` : ""}
+    <div class="actions"><button class="btn primary" id="btn-next2">다음 문제</button><button class="btn" id="btn-retry">같은 문장 다시 쓰기</button></div>`;
+  $("#result").hidden = false;
+  $("#btn-next2").onclick = next;
+  $("#btn-retry").onclick = () => { $("#result").hidden = true; renderExercise(false); setPhase("answering"); $("#answer").focus(); };
+  $("#btn-copy").onclick = async e => {
+    try { await navigator.clipboard.writeText(g.model_answer); e.target.textContent = "복사됨"; }
+    catch { const r = document.createRange(); r.selectNodeContents($("#model")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); e.target.textContent = "선택됨 · Ctrl+C"; }
+  };
+}
+
+/* ---------- review notebook ---------- */
+function renderReviewList() {
+  const box = $("#review-list");
+  if (!S.reviews.length) {
+    box.innerHTML = `<div class="empty">복습 노트가 비어 있습니다.<br>${S.settings.threshold}점 미만을 받은 문장이 여기에 모이고, 연습 중 세 문제마다 한 번씩 다시 나옵니다.</div>`;
+    return;
+  }
+  const list = S.reviews.slice().sort((a, b) => a.lastScore - b.lastScore);
+  box.innerHTML = list.map(r => {
+    const t = r.item.lines.find(l => l.target) || {};
+    const d = new Date(r.savedAt || Date.now());
+    return `<div class="rv">
+      <div class="rv-top"><span class="tag">${esc(r.item.situation)}</span>
+        <span class="rv-score" style="color:${scoreColor(r.lastScore)}">${r.lastScore}점</span>
+        <span>${d.getMonth() + 1}월 ${d.getDate()}일 저장 · ${r.attempts || 1}회 시도</span></div>
+      <p class="rv-ko">${esc(t.ko)}</p>
+      <details><summary>지난 답안과 모범 답안</summary><p>내 답: ${esc(r.lastAnswer)}</p><p>모범: ${esc(r.modelAnswer)}</p></details>
+      <div class="actions"><button class="btn primary small" data-go="${esc(r.id)}">다시 풀기</button>
+        <button class="btn ghost small" data-del="${esc(r.id)}">${S.rvConfirm === r.id ? "정말 삭제" : "삭제"}</button></div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { const r = S.reviews.find(x => x.id === b.dataset.go); if (r && S.phase !== "loading" && S.phase !== "grading") showReview(r); });
+  box.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const id = b.dataset.del;
+    if (S.rvConfirm !== id) { S.rvConfirm = id; renderReviewList(); return; }
+    S.rvConfirm = null; S.reviews = S.reviews.filter(x => x.id !== id);
+    await store.delReview(id); renderStats(); renderReviewList();
+  });
+}
+
+function switchTab(t) {
+  $("#tab-practice").setAttribute("aria-selected", t === "practice");
+  $("#tab-review").setAttribute("aria-selected", t === "review");
+  $("#panel-practice").hidden = t !== "practice";
+  $("#panel-review").hidden = t !== "review";
+}
+$("#tab-practice").onclick = () => switchTab("practice");
+$("#tab-review").onclick = () => { S.rvConfirm = null; renderReviewList(); switchTab("review"); };
+
+/* ---------- wiring ---------- */
+$("#btn-submit").onclick = submit;
+$("#btn-next").onclick = next;
+$("#btn-hint").onclick = () => { $("#hint").hidden = !$("#hint").hidden; };
+$("#btn-stop").onclick = () => S.ctl?.abort();
+$("#answer").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } });
+
+$("#sel-model").onchange = e => { S.settings.model = e.target.value; saveSettings(); };
+function refreshKey() {
+  S.sample = getKey() ? claudeApi : null;
+  $("#keybox").hidden = !!S.sample;
+}
+$("#btn-key").onclick = () => {
+  const k = $("#key-input").value.trim();
+  if (!k) { $("#key-input").focus(); return; }
+  setKey(k); $("#key-input").value = ""; refreshKey();
+  S.counter = 0; next();
+};
+$("#key-input").addEventListener("keydown", e => { if (e.key === "Enter") $("#btn-key").click(); });
+$("#btn-key-reset").onclick = () => { setKey(""); refreshKey(); switchTab("practice"); $("#key-input").focus(); };
+
+// first frame: a ready-to-play dialogue, then Claude's own if a key is saved
+S.current = { item: STARTERS[Math.floor(Math.random() * STARTERS.length)], source: "starter" };
+store.load(); refreshKey();
+renderSettings(); $("#sel-model").value = S.settings.model;
+renderExercise(false); setPhase("answering");
+renderStats(); renderReviewList();
+if (S.sample) generateNew();
+else setPhase("answering", "API 키를 넣기 전에는 예시 대화로 둘러볼 수 있습니다. 채점과 새 대화에는 키가 필요합니다.");
+</script>
+</body>
+</html>
