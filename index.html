@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>대화 영작 훈련</title>
-<!-- display "browser": a home-screen icon opens in the normal browser so it shares the saved API key and notes -->
-<link rel="manifest" href="manifest.webmanifest">
+<!-- no web manifest on purpose: "Add to Home Screen" then bookmarks the current URL, #setup fragment included,
+     so the icon re-applies the settings even where the home-screen app gets its own empty storage -->
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <meta name="apple-mobile-web-app-title" content="영작 훈련">
@@ -192,7 +192,7 @@ nav.tabs .pair-btn{margin-left:auto;align-self:center;background:var(--accent);c
   <section id="panel-practice" style="display:flex;flex-direction:column;gap:14px">
     <div class="keybox" id="keybox" hidden>
       <h2>Anthropic API 키를 입력하세요</h2>
-      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다. PC에서 한 번 넣은 뒤 오른쪽 위 ‘폰 연결’ QR을 폰으로 찍으면 폰에서는 입력할 필요가 없습니다.</p>
+      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다. PC에서 한 번 넣은 뒤 오른쪽 위 ‘폰 연결’ QR을 폰으로 찍으면 폰에서는 입력할 필요가 없습니다. 폰에서는 QR로 열린 그 화면에서 ‘홈 화면에 추가’를 해 두면 아이콘이 설정을 기억합니다.</p>
       <div class="keyrow">
         <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
         <button class="btn primary" id="btn-key">저장하고 시작</button>
@@ -478,7 +478,7 @@ function renderSettings() {
   $("#sel-level").value = S.settings.level;
   $("#sel-th").value = String(S.settings.threshold);
 }
-function saveSettings() { lsSet("ew_settings", S.settings); renderSettings(); }
+function saveSettings() { lsSet("ew_settings", S.settings); renderSettings(); keepSetupInUrl(); }
 $("#sel-level").onchange = e => { S.settings.level = e.target.value; saveSettings(); };
 $("#sel-th").onchange = e => { S.settings.threshold = +e.target.value; saveSettings(); };
 
@@ -811,6 +811,7 @@ $("#sel-model").onchange = e => { S.settings.model = e.target.value; saveSetting
 function refreshKey() {
   S.sample = getKey() ? claudeApi : null;
   $("#keybox").hidden = !!S.sample;
+  keepSetupInUrl();
 }
 $("#btn-key").onclick = () => {
   const k = $("#key-input").value.trim();
@@ -823,20 +824,26 @@ $("#btn-gh").onclick = () => {
   const t = $("#gh-input").value.trim();
   if (!t) { $("#gh-input").focus(); return; }
   sync.setToken(t); $("#gh-input").value = ""; $("#gh-input").placeholder = "저장됨 · 바꾸려면 새 토큰 입력";
-  sync.run();
+  keepSetupInUrl(); sync.run();
 };
 $("#gh-input").addEventListener("keydown", e => { if (e.key === "Enter") $("#btn-gh").click(); });
-$("#btn-gh-off").onclick = () => { sync.setToken(""); $("#gh-input").placeholder = "ghp_..."; sync.status("꺼짐 · 이 기기에만 저장됩니다"); };
+$("#btn-gh-off").onclick = () => { sync.setToken(""); keepSetupInUrl(); $("#gh-input").placeholder = "ghp_..."; sync.status("꺼짐 · 이 기기에만 저장됩니다"); };
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && sync.token()) sync.run(); });
 $("#btn-key-reset").onclick =() => { setKey(""); refreshKey(); switchTab("practice"); $("#key-input").focus(); };
 
 /* ---------- phone pairing: settings travel in the URL fragment, which browsers never send to the server ---------- */
 const b64u = s => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64u = s => atob(s.replace(/-/g, "+").replace(/_/g, "/"));
-function setupLink() {
+function setupHash() {
   const p = { k: getKey(), m: S.settings.model };
   if (sync.token()) p.g = sync.token();
-  return location.origin + location.pathname + "#setup=" + b64u(JSON.stringify(p));
+  return "#setup=" + b64u(JSON.stringify(p));
+}
+function setupLink() { return location.origin + location.pathname + setupHash(); }
+// keep the settings in the address bar so a home-screen icon saved from this page carries them
+function keepSetupInUrl() {
+  const target = getKey() ? setupHash() : "";
+  if (location.hash !== target) history.replaceState(null, "", location.pathname + location.search + target);
 }
 function applySetupFromHash() {
   const m = location.hash.match(/^#setup=([A-Za-z0-9_-]+)/);
@@ -845,10 +852,9 @@ function applySetupFromHash() {
   try {
     const p = JSON.parse(unb64u(m[1]));
     if (p.k) { setKey(p.k); ok = true; }
-    if (p.g) sync.setToken(p.g);
+    if (p.g && p.g !== sync.token()) sync.setToken(p.g);
     if (p.m) { S.settings.model = p.m; lsSet("ew_settings", S.settings); }
   } catch {}
-  history.replaceState(null, "", location.pathname + location.search);
   return ok;
 }
 $("#btn-pair").onclick = () => {
