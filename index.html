@@ -141,6 +141,14 @@ textarea:disabled{opacity:.75}
 .keybox a,.sync-help a{color:var(--accent)}
 .sync-box{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
 .sync-help{margin:0;font-size:.84rem;color:var(--muted)}
+.pair-btn{margin-left:auto;align-self:center;background:var(--soft);color:var(--accent);border:0;border-radius:999px;padding:4px 14px;font-size:.84rem;font-weight:600;margin-bottom:6px}
+.pair{background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:16px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+.qr-frame{background:#ffffff;padding:12px;border-radius:8px;line-height:0;flex:none}
+.qr-frame img,.qr-frame canvas{width:200px;height:200px}
+.pair-text{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:6px}
+.pair-text h2{margin:0;font-size:1.05rem}
+.pair-text p{margin:0;font-size:.88rem;color:var(--muted)}
+.pair-text .warn{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -161,12 +169,24 @@ textarea:disabled{opacity:.75}
   <nav class="tabs" role="tablist">
     <button id="tab-practice" role="tab" aria-selected="true">연습</button>
     <button id="tab-review" role="tab" aria-selected="false">복습 노트<span class="count" id="rv-count">0</span></button>
+    <button id="btn-pair" class="pair-btn" type="button">폰 연결</button>
   </nav>
+
+  <div class="pair" id="pair-panel" hidden>
+    <div class="qr-frame" id="qr"></div>
+    <div class="pair-text">
+      <h2>폰 카메라로 찍으세요</h2>
+      <p>사이트가 열리면서 이 PC의 API 키, 동기화, 모델 설정이 폰에 그대로 옮겨집니다. 폰에서는 아무것도 입력하지 않아도 됩니다.</p>
+      <p id="pair-sync-note"></p>
+      <p class="warn">QR 안에 API 키가 들어 있습니다. 캡처해서 남에게 보내지 마세요.</p>
+      <div class="actions"><button class="btn" id="btn-pair-close">닫기</button></div>
+    </div>
+  </div>
 
   <section id="panel-practice" style="display:flex;flex-direction:column;gap:14px">
     <div class="keybox" id="keybox" hidden>
       <h2>Anthropic API 키를 입력하세요</h2>
-      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다. PC와 휴대폰에서 같은 키를 써도 됩니다. 복습 노트를 기기 사이에 맞추려면 아래 설정의 ‘기기 간 동기화’도 켜 주세요.</p>
+      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다. PC에서 한 번 넣은 뒤 오른쪽 위 ‘폰 연결’ QR을 폰으로 찍으면 폰에서는 입력할 필요가 없습니다.</p>
       <div class="keyrow">
         <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
         <button class="btn primary" id="btn-key">저장하고 시작</button>
@@ -225,6 +245,7 @@ textarea:disabled{opacity:.75}
   </section>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const SITUATIONS = ["회사","식당","공항","상점","파티","관공서","병원","은행","호텔","부동산","학교·학부모","이웃","고객센터 전화","택시·대중교통","헬스장","미용실"];
 
@@ -803,7 +824,43 @@ $("#btn-gh-off").onclick = () => { sync.setToken(""); $("#gh-input").placeholder
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && sync.token()) sync.run(); });
 $("#btn-key-reset").onclick =() => { setKey(""); refreshKey(); switchTab("practice"); $("#key-input").focus(); };
 
+/* ---------- phone pairing: settings travel in the URL fragment, which browsers never send to the server ---------- */
+const b64u = s => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = s => atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+function setupLink() {
+  const p = { k: getKey(), m: S.settings.model };
+  if (sync.token()) p.g = sync.token();
+  return location.origin + location.pathname + "#setup=" + b64u(JSON.stringify(p));
+}
+function applySetupFromHash() {
+  const m = location.hash.match(/^#setup=([A-Za-z0-9_-]+)/);
+  if (!m) return false;
+  let ok = false;
+  try {
+    const p = JSON.parse(unb64u(m[1]));
+    if (p.k) { setKey(p.k); ok = true; }
+    if (p.g) sync.setToken(p.g);
+    if (p.m) { S.settings.model = p.m; lsSet("ew_settings", S.settings); }
+  } catch {}
+  history.replaceState(null, "", location.pathname + location.search);
+  return ok;
+}
+$("#btn-pair").onclick = () => {
+  const panel = $("#pair-panel");
+  if (!panel.hidden) { panel.hidden = true; $("#qr").innerHTML = ""; return; }
+  if (!getKey()) { switchTab("practice"); $("#keybox").hidden = false; $("#key-input").focus(); setPhase(S.phase, "먼저 이 기기에 API 키를 넣어야 폰으로 옮길 수 있습니다."); return; }
+  $("#qr").innerHTML = "";
+  if (window.QRCode) new QRCode($("#qr"), { text: setupLink(), width: 400, height: 400, correctLevel: QRCode.CorrectLevel.L });
+  else $("#qr").textContent = "QR 생성기를 불러오지 못했습니다.";
+  $("#pair-sync-note").textContent = sync.token()
+    ? "복습 노트 동기화도 함께 켜집니다."
+    : "동기화가 꺼져 있어 복습 노트는 기기마다 따로 쌓입니다. 함께 보려면 설정에서 동기화를 먼저 켜세요.";
+  panel.hidden = false;
+};
+$("#btn-pair-close").onclick = () => { $("#pair-panel").hidden = true; $("#qr").innerHTML = ""; };
+
 // first frame: a ready-to-play dialogue, then Claude's own if a key is saved
+const paired = applySetupFromHash();
 S.current = { item: STARTERS[Math.floor(Math.random() * STARTERS.length)], source: "starter" };
 store.load(); refreshKey();
 renderSettings(); $("#sel-model").value = S.settings.model;
