@@ -150,8 +150,14 @@ textarea:disabled{opacity:.75}
 .ph mark{background:var(--mark);color:var(--mark-ink);padding:0 2px;border-radius:2px}
 .ph-reveal{border:1px dashed var(--accent);background:transparent;color:var(--accent);border-radius:6px;padding:2px 10px;font-size:.84rem}
 nav.tabs{flex-wrap:wrap}
+.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px}
+.levels button{border:0;background:transparent;color:var(--muted);border-radius:7px;padding:8px 4px;font-weight:600;font-size:.92rem}
+.levels button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.levels button:disabled{opacity:.4;cursor:not-allowed}
 @media (max-width:520px){.line{max-width:100%}.stats{gap:12px}.kbd{display:none}
   .exprs{grid-template-columns:1fr;gap:2px}
+  nav.tabs button{padding:8px 8px}
+  nav.tabs .pair-btn{padding:5px 10px;font-size:.8rem}
   .exprs dd{margin-bottom:10px}}
 [hidden]{display:none!important}
 .keybox{background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -187,6 +193,13 @@ nav.tabs .pair-btn{margin-left:auto;align-self:center;background:var(--accent);c
     </div>
   </header>
 
+  <div class="levels" role="tablist" aria-label="난이도" id="level-tabs">
+    <button data-level="초급" role="tab">초급</button>
+    <button data-level="중급" role="tab">중급</button>
+    <button data-level="상급" role="tab">상급</button>
+    <button data-level="최상급" role="tab">최상급</button>
+  </div>
+
   <nav class="tabs" role="tablist">
     <button id="tab-practice" role="tab" aria-selected="true">연습</button>
     <button id="tab-review" role="tab" aria-selected="false">복습 노트<span class="count" id="rv-count">0</span></button>
@@ -215,11 +228,10 @@ nav.tabs .pair-btn{margin-left:auto;align-self:center;background:var(--accent);c
       </div>
     </div>
     <details class="settings">
-      <summary>상황·난이도·API 설정</summary>
+      <summary>상황·API 설정</summary>
       <div class="set-body">
         <div class="chips" id="sit-chips"></div>
         <div class="set-row">
-          <label>난이도 <select id="sel-level"><option value="초급">초급</option><option value="중급">중급</option><option value="상급">상급</option><option value="최상급">최상급</option></select></label>
           <label>복습 저장 기준 <select id="sel-th"><option value="60">60점 미만</option><option value="70">70점 미만</option><option value="80">80점 미만</option><option value="90">90점 미만</option></select></label>
         </div>
         <div class="set-row">
@@ -329,9 +341,17 @@ const S = {
 const DEVICE = (() => { let d = lsGet("ew_device", null); if (!d) { d = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); lsSet("ew_device", d); } return d; })();
 S.deleted = {}; S.dev = {}; S.phrases = []; S.phConfirm = null; S.phHide = false; S.phQuery = "";
 
+// everything is kept per level; records made before levels existed count as 상급
+const curLv = () => ["초급", "중급", "상급", "최상급"].includes(S.settings.level) ? S.settings.level : "상급";
+const reviewsHere = () => S.reviews.filter(r => levelOf(r.item) === curLv());
+const phrasesHere = () => S.phrases.filter(p => (p.level || "상급") === curLv());
+
 function aggregateStats() {
   let a = 0, t = 0;
-  for (const v of Object.values(S.dev)) { a += v.a || 0; t += v.t || 0; }
+  for (const [k, v] of Object.entries(S.dev)) {
+    const lv = k.includes("|") ? k.split("|")[1] : "상급";   // stats keys are "device|level"
+    if (lv === curLv()) { a += v.a || 0; t += v.t || 0; }
+  }
   S.stats.attempts = a; S.stats.total = t;
 }
 function saveLocal() {
@@ -378,7 +398,7 @@ const store = {
   async putReview() { saveLocal(); sync.schedule(); },
   async delReview(id) { if (id) S.deleted[id] = Date.now(); saveLocal(); sync.schedule(); },
   async putStats() { saveLocal(); sync.schedule(); },
-  bump(score) { const d = S.dev[DEVICE] || { a: 0, t: 0 }; S.dev[DEVICE] = { a: d.a + 1, t: d.t + score }; aggregateStats(); }
+  bump(score) { const k = DEVICE + "|" + curLv(), d = S.dev[k] || { a: 0, t: 0 }; S.dev[k] = { a: d.a + 1, t: d.t + score }; aggregateStats(); }
 };
 
 const sync = {
@@ -492,9 +512,30 @@ const claudeApi = {
 function renderStats() {
   $("#st-n").textContent = S.stats.attempts;
   $("#st-avg").textContent = S.stats.attempts ? Math.round(S.stats.total / S.stats.attempts) : "–";
-  $("#st-rv").textContent = S.reviews.length;
-  $("#rv-count").textContent = S.reviews.length;
+  $("#st-rv").textContent = reviewsHere().length;
+  $("#rv-count").textContent = reviewsHere().length;
+  $("#ph-count").textContent = phrasesHere().length;
 }
+function renderLevels() {
+  const busy = S.phase === "loading" || S.phase === "grading";
+  document.querySelectorAll("#level-tabs button").forEach(b => {
+    b.setAttribute("aria-selected", b.dataset.level === curLv());
+    b.disabled = busy && b.dataset.level !== curLv();
+  });
+}
+function switchLevel(lv) {
+  if (lv === curLv() || S.phase === "loading" || S.phase === "grading") return;
+  saveCurrent();
+  S.settings.level = lv; lsSet("ew_settings", S.settings);
+  S.counter = 0; S.rvConfirm = null; S.phConfirm = null;
+  aggregateStats(); renderLevels(); renderStats(); renderReviewList(); renderPhraseList();
+  if (restoreCurrent()) return;
+  if (S.sample) { generateNew(); return; }
+  S.current = { item: STARTERS[Math.floor(Math.random() * STARTERS.length)], source: "starter" };
+  showFreshExercise();
+  setPhase("answering", "API 키를 넣으면 이 난이도에 맞는 대화를 Claude가 만듭니다. 지금은 예시 대화입니다.");
+}
+document.querySelectorAll("#level-tabs button").forEach(b => b.onclick = () => switchLevel(b.dataset.level));
 function renderSettings() {
   const box = $("#sit-chips"); box.innerHTML = "";
   const all = !S.settings.situations.length;
@@ -505,11 +546,9 @@ function renderSettings() {
     S.settings.situations = a.includes(s) ? a.filter(x => x !== s) : [...a, s];
     saveSettings();
   }));
-  $("#sel-level").value = S.settings.level;
   $("#sel-th").value = String(S.settings.threshold);
 }
 function saveSettings() { lsSet("ew_settings", S.settings); renderSettings(); keepSetupInUrl(); }
-$("#sel-level").onchange = e => { S.settings.level = e.target.value; saveSettings(); };
 $("#sel-th").onchange = e => { S.settings.threshold = +e.target.value; saveSettings(); };
 
 /* ---------- exercise rendering ---------- */
@@ -541,6 +580,7 @@ function renderExercise(showEn = false) {
 function setPhase(p, msg) {
   S.phase = p;
   const busy = p === "loading" || p === "grading";
+  renderLevels();
   $("#answer").disabled = busy || p === "graded";
   $("#btn-submit").disabled = busy || p !== "answering";
   $("#btn-next").disabled = busy;
@@ -609,7 +649,7 @@ const levelOf = item => LEVELS[item?.level] ? item.level : "상급";  // items s
 
 function genPrompt(sit) {
   const avoid = S.stats.recent.slice(-15).map(r => "- " + r.split("|")[1]).join("\n") || "(없음)";
-  const L = LEVELS[S.settings.level] || LEVELS["상급"];
+  const L = LEVELS[curLv()];
   return `You write material for a Korean→English composition drill for ${L.learner}.
 
 Create ONE realistic dialogue in Korean set in this kind of place: ${sit}. Invent a specific, everyday scene there (a concrete problem, request, negotiation, small talk with a purpose, complaint, arrangement, etc.).
@@ -646,7 +686,7 @@ async function generateNew() {
     const raw = await S.sample.json(genPrompt(sit), { cache: false, signal: S.ctl.signal });
     const item = validItem(raw);
     if (!item) throw { code: "invalid_json" };
-    item.level = LEVELS[S.settings.level] ? S.settings.level : "상급";
+    item.level = curLv();
     S.current = { item, source: "new" };
     S.stats.recent = [...S.stats.recent, `${item.situation}|${item.scene}`].slice(-20);
     saveLocal();
@@ -659,9 +699,11 @@ async function generateNew() {
 }
 
 // the exercise on screen survives a reload; only "다음 문제" moves on
-function saveCurrent() { lsSet("ew_current", { current: S.current, graded: S.graded, draft: $("#answer").value }); }
+function saveCurrent() { lsSet("ew_current_" + curLv(), { current: S.current, graded: S.graded, draft: $("#answer").value }); }
 function restoreCurrent() {
-  const c = lsGet("ew_current", null);
+  const old = lsGet("ew_current", null);   // single slot from before levels existed
+  if (old?.current?.item) { lsSet("ew_current_" + levelOf(old.current.item), old); try { localStorage.removeItem("ew_current"); } catch {} }
+  const c = lsGet("ew_current_" + curLv(), null);
   if (!c?.current?.item?.lines) return false;
   S.current = c.current;
   $("#answer").value = c.draft || "";
@@ -694,7 +736,7 @@ function showReview(rv) {
 async function next() {
   if (S.phase === "loading" || S.phase === "grading") return;
   S.counter++;
-  const queue = S.reviews.slice().sort((a, b) => (a.lastSeen || 0) - (b.lastSeen || 0));
+  const queue = reviewsHere().sort((a, b) => (a.lastSeen || 0) - (b.lastSeen || 0));
   const curId = S.current?.reviewId;
   const cand = queue.find(r => r.id !== curId);
   if (cand && (S.counter % 3 === 0 || !S.sample)) return showReview(cand);
@@ -803,18 +845,19 @@ async function recordResult(score, answer, g) {
 const phraseId = en => "ph_" + String(en).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 function savePhrases(g, item, answer, now) {
   const t = item.lines.find(l => l.target) || {};
+  const lv = curLv();
   let n = 0;
   for (const x of (g.key_expressions || [])) {
     if (!x || !x.en) continue;
-    const id = phraseId(x.en);
-    if (id === "ph_") continue;
+    if (phraseId(x.en) === "ph_") continue;
+    const id = phraseId(x.en) + (lv === "상급" ? "" : "@" + lv);   // 상급 keeps the ids saved before levels existed
     const ex = { ko: t.ko || "", model: g.model_answer || "", mine: answer, situation: item.situation, at: now };
     const old = S.phrases.find(p => p.id === id);
     if (old) {
       old.ko = x.ko || old.ko; old.lastSeen = now; old.count = (old.count || 1) + 1;
       old.examples = [ex, ...(old.examples || []).filter(e => e.ko !== ex.ko)].slice(0, 3);
     } else {
-      S.phrases.push({ id, en: String(x.en), ko: String(x.ko || ""), examples: [ex], count: 1, savedAt: now, lastSeen: now });
+      S.phrases.push({ id, level: lv, en: String(x.en), ko: String(x.ko || ""), examples: [ex], count: 1, savedAt: now, lastSeen: now });
       n++;
     }
   }
@@ -830,15 +873,15 @@ function markIn(sentence, expr) {
 }
 
 function renderPhraseList() {
-  $("#ph-count").textContent = S.phrases.length;
+  $("#ph-count").textContent = phrasesHere().length;
   const box = $("#phrase-list");
   if (!box) return;
-  if (!S.phrases.length) {
-    box.innerHTML = `<div class="empty">아직 저장된 표현이 없습니다.<br>채점할 때마다 ‘기억할 표현’이 그 문장과 함께 여기에 쌓입니다.</div>`;
+  if (!phrasesHere().length) {
+    box.innerHTML = `<div class="empty">${curLv()} 표현 노트가 비어 있습니다.<br>${curLv()} 문제를 채점할 때마다 ‘기억할 표현’이 그 문장과 함께 여기에 쌓입니다.</div>`;
     return;
   }
   const q = S.phQuery.trim().toLowerCase();
-  const list = S.phrases.slice().sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
+  const list = phrasesHere().sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
     .filter(p => !q || [p.en, p.ko, ...(p.examples || []).flatMap(e => [e.ko, e.model])].join(" ").toLowerCase().includes(q));
   if (!list.length) { box.innerHTML = `<div class="empty">‘${esc(S.phQuery)}’와 맞는 표현이 없습니다.</div>`; return; }
   box.innerHTML = list.map(p => {
@@ -916,11 +959,11 @@ function renderResult(g, answer, note) {
 /* ---------- review notebook ---------- */
 function renderReviewList() {
   const box = $("#review-list");
-  if (!S.reviews.length) {
-    box.innerHTML = `<div class="empty">복습 노트가 비어 있습니다.<br>${S.settings.threshold}점 미만을 받은 문장이 여기에 모이고, 연습 중 세 문제마다 한 번씩 다시 나옵니다.</div>`;
+  if (!reviewsHere().length) {
+    box.innerHTML = `<div class="empty">${curLv()} 복습 노트가 비어 있습니다.<br>${curLv()} 문제에서 ${S.settings.threshold}점 미만을 받은 문장이 여기에 모이고, 연습 중 세 문제마다 한 번씩 다시 나옵니다.</div>`;
     return;
   }
-  const list = S.reviews.slice().sort((a, b) => a.lastScore - b.lastScore);
+  const list = reviewsHere().sort((a, b) => a.lastScore - b.lastScore);
   box.innerHTML = list.map(r => {
     const t = r.item.lines.find(l => l.target) || {};
     const d = new Date(r.savedAt || Date.now());
