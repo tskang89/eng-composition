@@ -13,8 +13,10 @@ Claude가 회사·식당·공항·상점·파티·관공서 등 일상 상황의
 2. 처음 한 번 [Anthropic API 키](https://console.anthropic.com/settings/keys)를 입력합니다.
 3. 설정에서 상황, 난이도, 복습 기준 점수, 모델(Opus 5.5 / Sonnet 5.5 / Haiku 4.5)을 고를 수 있습니다.
 
-## 저장 위치
+## 저장 위치와 기기 간 동기화
 
-API 키, 복습 노트, 통계는 모두 **사용하는 브라우저의 localStorage**에만 저장됩니다. 저장소나 다른 서버로는 전송되지 않으며, 브라우저에서 Anthropic API(`api.anthropic.com`)로 직접 요청합니다. 다른 기기나 브라우저에서는 복습 노트가 공유되지 않습니다.
+API 키와 GitHub 토큰은 **사용하는 브라우저의 localStorage**에만 저장되고, 각각 `api.anthropic.com`과 `api.github.com`으로만 전송됩니다.
+
+복습 노트와 통계도 기본적으로 브라우저에 저장됩니다. 설정의 ‘기기 간 동기화’에 [gist 권한만 있는 GitHub 토큰](https://github.com/settings/tokens/new?scopes=gist&description=eng-composition%20sync)을 넣으면, 내 계정의 비공개 Gist(`eng-composition-data.json`) 하나에 저장되어 PC와 휴대폰이 같은 복습 노트를 봅니다. 접속할 때, 채점·삭제할 때, 앱으로 돌아올 때마다 자동으로 합쳐집니다.
 
 단일 파일(`index.html`)이며 빌드 과정이 없습니다.

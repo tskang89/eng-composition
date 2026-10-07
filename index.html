@@ -138,7 +138,9 @@ textarea:disabled{opacity:.75}
 .keybox p{margin:0;font-size:.86rem;color:var(--muted)}
 .keyrow{display:flex;flex-wrap:wrap;gap:8px}
 .keyrow input{flex:1 1 260px;min-width:0;font:inherit;font-family:ui-monospace,Consolas,monospace;font-size:.88rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
-.keybox a{color:var(--accent)}
+.keybox a,.sync-help a{color:var(--accent)}
+.sync-box{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.sync-help{margin:0;font-size:.84rem;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -164,7 +166,7 @@ textarea:disabled{opacity:.75}
   <section id="panel-practice" style="display:flex;flex-direction:column;gap:14px">
     <div class="keybox" id="keybox" hidden>
       <h2>Anthropic API 키를 입력하세요</h2>
-      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다.</p>
+      <p>대화 생성과 채점은 Claude API로 합니다. 키는 이 브라우저의 저장소에만 보관되고 api.anthropic.com 외에는 어디로도 보내지 않습니다. 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받습니다. PC와 휴대폰에서 같은 키를 써도 됩니다. 복습 노트를 기기 사이에 맞추려면 아래 설정의 ‘기기 간 동기화’도 켜 주세요.</p>
       <div class="keyrow">
         <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
         <button class="btn primary" id="btn-key">저장하고 시작</button>
@@ -185,6 +187,15 @@ textarea:disabled{opacity:.75}
             <option value="claude-haiku-4-5">Claude Haiku 4.5 (가장 저렴·빠름)</option>
           </select></label>
           <button class="btn small" id="btn-key-reset">API 키 바꾸기</button>
+        </div>
+        <div class="sync-box">
+          <div class="set-row"><b style="color:var(--ink)">기기 간 동기화 (GitHub Gist)</b><span id="sync-status">꺼짐 · 이 기기에만 저장됩니다</span></div>
+          <p class="sync-help">PC와 휴대폰에 같은 GitHub 토큰을 넣으면 복습 노트와 통계가 내 비공개 Gist 하나에 함께 저장됩니다. 토큰은 <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=eng-composition%20sync" target="_blank" rel="noopener">여기서 gist 권한만 체크해</a> 발급하세요.</p>
+          <div class="keyrow">
+            <input id="gh-input" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_...">
+            <button class="btn small" id="btn-gh">토큰 저장·동기화</button>
+            <button class="btn ghost small" id="btn-gh-off">동기화 끄기</button>
+          </div>
         </div>
       </div>
     </details>
@@ -262,12 +273,114 @@ const S = {
   phase: "answering", ctl: null, counter: 0, graded: null, rvConfirm: null
 };
 
-/* ---------- storage: this browser's localStorage ---------- */
+/* ---------- storage: localStorage, mirrored to a private GitHub Gist when a token is set ---------- */
+// stats are kept per device ({deviceId: {a: attempts, t: total score}}) so two devices never overwrite each other's counts
+const DEVICE = (() => { let d = lsGet("ew_device", null); if (!d) { d = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); lsSet("ew_device", d); } return d; })();
+S.deleted = {}; S.dev = {};
+
+function aggregateStats() {
+  let a = 0, t = 0;
+  for (const v of Object.values(S.dev)) { a += v.a || 0; t += v.t || 0; }
+  S.stats.attempts = a; S.stats.total = t;
+}
+function saveLocal() {
+  lsSet("ew_reviews", S.reviews); lsSet("ew_deleted", S.deleted);
+  lsSet("ew_stats", { recent: S.stats.recent, dev: S.dev });
+}
+const localData = () => ({ version: 1, reviews: S.reviews, deleted: S.deleted, stats: { recent: S.stats.recent, dev: S.dev }, updatedAt: Date.now() });
+
+function mergeRemote(rm) {
+  if (!rm || typeof rm !== "object") return;
+  const del = Object.assign({}, rm.deleted || {}, S.deleted);
+  const cutoff = Date.now() - 90 * 864e5;
+  for (const k in del) if (del[k] < cutoff) delete del[k];
+  const map = new Map();
+  for (const r of [...(rm.reviews || []), ...S.reviews]) {
+    if (!r || !r.id) continue;
+    const o = map.get(r.id);
+    if (!o || (r.lastSeen || 0) > (o.lastSeen || 0)) map.set(r.id, r);
+  }
+  S.reviews = [...map.values()].filter(r => !del[r.id]);
+  S.deleted = del;
+  const rdev = rm.stats?.dev || {};
+  for (const k in rdev) if (!S.dev[k] || (rdev[k].a || 0) > (S.dev[k].a || 0)) S.dev[k] = rdev[k];
+  const rec = [...(rm.stats?.recent || []), ...S.stats.recent];
+  S.stats.recent = [...new Set(rec)].slice(-20);
+  aggregateStats();
+}
+
 const store = {
-  load() { S.reviews = lsGet("ew_reviews", []); S.stats = Object.assign(S.stats, lsGet("ew_stats", {})); },
-  async putReview() { lsSet("ew_reviews", S.reviews); },
-  async delReview() { lsSet("ew_reviews", S.reviews); },
-  async putStats() { lsSet("ew_stats", S.stats); }
+  load() {
+    S.reviews = lsGet("ew_reviews", []); S.deleted = lsGet("ew_deleted", {});
+    const st = lsGet("ew_stats", {});
+    S.stats.recent = st.recent || [];
+    S.dev = st.dev || {};
+    if (!st.dev && st.attempts) S.dev[DEVICE] = { a: st.attempts, t: st.total || 0 };  // older single-device format
+    aggregateStats();
+  },
+  async putReview() { saveLocal(); sync.schedule(); },
+  async delReview(id) { if (id) S.deleted[id] = Date.now(); saveLocal(); sync.schedule(); },
+  async putStats() { saveLocal(); sync.schedule(); },
+  bump(score) { const d = S.dev[DEVICE] || { a: 0, t: 0 }; S.dev[DEVICE] = { a: d.a + 1, t: d.t + score }; aggregateStats(); }
+};
+
+const sync = {
+  FILE: "eng-composition-data.json",
+  timer: null, busy: false, again: false,
+  token() { try { return localStorage.getItem("ew_gh_token") || ""; } catch { return ""; } },
+  setToken(t) { try { t ? localStorage.setItem("ew_gh_token", t) : localStorage.removeItem("ew_gh_token"); localStorage.removeItem("ew_gist_id"); } catch {} },
+  status(msg, err) { const el = $("#sync-status"); if (el) { el.textContent = msg; el.style.color = err ? "var(--bad)" : ""; } },
+  async gh(path, opts = {}) {
+    const headers = { Accept: "application/vnd.github+json", Authorization: "Bearer " + this.token(), "X-GitHub-Api-Version": "2022-11-28" };
+    if (opts.body) headers["Content-Type"] = "application/json";
+    const r = await fetch("https://api.github.com" + path, { ...opts, headers, cache: "no-store" });
+    if (!r.ok) throw { status: r.status };
+    return r.json();
+  },
+  async gistId() {
+    const cached = lsGet("ew_gist_id", null);
+    if (cached) return cached;
+    for (let page = 1; page <= 10; page++) {
+      const list = await this.gh(`/gists?per_page=100&page=${page}`);
+      const g = list.find(x => x.files && x.files[this.FILE]);
+      if (g) { lsSet("ew_gist_id", g.id); return g.id; }
+      if (list.length < 100) break;
+    }
+    const g = await this.gh("/gists", { method: "POST", body: JSON.stringify({
+      description: "대화 영작 훈련 — 복습 노트 동기화 (자동 생성)", public: false,
+      files: { [this.FILE]: { content: JSON.stringify(localData()) } } }) });
+    lsSet("ew_gist_id", g.id); return g.id;
+  },
+  async pull(id) {
+    const g = await this.gh("/gists/" + id);
+    const f = g.files?.[this.FILE];
+    if (!f) return {};
+    let txt = f.content;
+    if (f.truncated && f.raw_url) txt = await (await fetch(f.raw_url, { cache: "no-store" })).text();
+    try { return JSON.parse(txt || "{}"); } catch { return {}; }
+  },
+  schedule() { if (!this.token()) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), 1200); },
+  async run(retry = true) {
+    if (!this.token()) { this.status("꺼짐 · 이 기기에만 저장됩니다"); return; }
+    if (this.busy) { this.again = true; return; }
+    this.busy = true; this.status("동기화 중…");
+    try {
+      const id = await this.gistId();
+      mergeRemote(await this.pull(id));
+      saveLocal();
+      await this.gh("/gists/" + id, { method: "PATCH", body: JSON.stringify({ files: { [this.FILE]: { content: JSON.stringify(localData()) } } }) });
+      const t = new Date();
+      this.status(`동기화됨 · ${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`);
+      renderStats(); renderReviewList();
+    } catch (e) {
+      if (e?.status === 404 && retry && lsGet("ew_gist_id", null)) { lsSet("ew_gist_id", null); this.busy = false; return this.run(false); }
+      this.status(e?.status === 401 ? "GitHub 토큰이 올바르지 않거나 만료되었습니다. 새 토큰을 넣어 주세요."
+        : e?.status === 403 || e?.status === 404 ? "토큰에 Gist 권한이 없습니다. gist 권한으로 다시 발급해 주세요."
+        : "동기화하지 못했습니다. 인터넷 연결을 확인해 주세요. 다음 저장 때 다시 시도합니다.", true);
+    }
+    this.busy = false;
+    if (this.again) { this.again = false; this.schedule(); }
+  }
 };
 
 /* ---------- Claude API (direct from the browser with the user's own key) ---------- */
@@ -448,7 +561,7 @@ async function generateNew() {
     if (!item) throw { code: "invalid_json" };
     S.current = { item, source: "new" };
     S.stats.recent = [...S.stats.recent, `${item.situation}|${item.scene}`].slice(-20);
-    lsSet("ew_stats", S.stats);
+    saveLocal();
     showFreshExercise();
   } catch (e) {
     if (e?.code === "cancelled") { setPhase(S.graded ? "graded" : "answering"); return; }
@@ -551,7 +664,7 @@ async function submit() {
 }
 
 async function recordResult(score, answer, g) {
-  S.stats.attempts++; S.stats.total += score;
+  store.bump(score);
   const th = S.settings.threshold, now = Date.now();
   const { source, reviewId, item } = S.current;
   let note = null;
@@ -679,7 +792,16 @@ $("#btn-key").onclick = () => {
   S.counter = 0; next();
 };
 $("#key-input").addEventListener("keydown", e => { if (e.key === "Enter") $("#btn-key").click(); });
-$("#btn-key-reset").onclick = () => { setKey(""); refreshKey(); switchTab("practice"); $("#key-input").focus(); };
+$("#btn-gh").onclick = () => {
+  const t = $("#gh-input").value.trim();
+  if (!t) { $("#gh-input").focus(); return; }
+  sync.setToken(t); $("#gh-input").value = ""; $("#gh-input").placeholder = "저장됨 · 바꾸려면 새 토큰 입력";
+  sync.run();
+};
+$("#gh-input").addEventListener("keydown", e => { if (e.key === "Enter") $("#btn-gh").click(); });
+$("#btn-gh-off").onclick = () => { sync.setToken(""); $("#gh-input").placeholder = "ghp_..."; sync.status("꺼짐 · 이 기기에만 저장됩니다"); };
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && sync.token()) sync.run(); });
+$("#btn-key-reset").onclick =() => { setKey(""); refreshKey(); switchTab("practice"); $("#key-input").focus(); };
 
 // first frame: a ready-to-play dialogue, then Claude's own if a key is saved
 S.current = { item: STARTERS[Math.floor(Math.random() * STARTERS.length)], source: "starter" };
@@ -687,6 +809,7 @@ store.load(); refreshKey();
 renderSettings(); $("#sel-model").value = S.settings.model;
 renderExercise(false); setPhase("answering");
 renderStats(); renderReviewList();
+if (sync.token()) { $("#gh-input").placeholder = "저장됨 · 바꾸려면 새 토큰 입력"; sync.run(); }
 if (S.sample) generateNew();
 else setPhase("answering", "API 키를 넣기 전에는 예시 대화로 둘러볼 수 있습니다. 채점과 새 대화에는 키가 필요합니다.");
 </script>
