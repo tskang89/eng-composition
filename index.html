@@ -138,6 +138,18 @@ textarea:disabled{opacity:.75}
 .copy-row{display:flex;gap:8px;align-items:center;margin-top:6px}
 .small{font-size:.8rem;padding:4px 10px}
 .exprs dt,.exprs dd{min-width:0;overflow-wrap:anywhere}
+.ph-tools{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:12px}
+.ph-tools input[type=search]{flex:1 1 220px;min-width:0;font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.ph-toggle{display:flex;gap:6px;align-items:center;font-size:.86rem;color:var(--muted)}
+.ph-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.ph-en{font-family:var(--f-en);font-size:1.12rem;font-weight:600;overflow-wrap:anywhere}
+.ph-ko{color:var(--muted);font-size:.92rem}
+.ph-ex{border-left:3px solid var(--line);padding-left:10px;display:flex;flex-direction:column;gap:2px}
+.ph-ex p,.ph details p{margin:0}
+.ph-model,.ph details p:not(.rv-ko){font-family:var(--f-en);font-size:.98rem}
+.ph mark{background:var(--mark);color:var(--mark-ink);padding:0 2px;border-radius:2px}
+.ph-reveal{border:1px dashed var(--accent);background:transparent;color:var(--accent);border-radius:6px;padding:2px 10px;font-size:.84rem}
+nav.tabs{flex-wrap:wrap}
 @media (max-width:520px){.line{max-width:100%}.stats{gap:12px}.kbd{display:none}
   .exprs{grid-template-columns:1fr;gap:2px}
   .exprs dd{margin-bottom:10px}}
@@ -178,6 +190,7 @@ nav.tabs .pair-btn{margin-left:auto;align-self:center;background:var(--accent);c
   <nav class="tabs" role="tablist">
     <button id="tab-practice" role="tab" aria-selected="true">연습</button>
     <button id="tab-review" role="tab" aria-selected="false">복습 노트<span class="count" id="rv-count">0</span></button>
+    <button id="tab-phrases" role="tab" aria-selected="false">표현 노트<span class="count" id="ph-count">0</span></button>
     <button id="btn-pair" class="pair-btn" type="button">폰 연결 (QR)</button>
   </nav>
 
@@ -252,6 +265,14 @@ nav.tabs .pair-btn{margin-left:auto;align-self:center;background:var(--accent);c
   <section id="panel-review" hidden>
     <div class="review-list" id="review-list"></div>
   </section>
+
+  <section id="panel-phrases" hidden>
+    <div class="ph-tools">
+      <input id="ph-search" type="search" placeholder="표현·뜻·예문 검색" autocomplete="off">
+      <label class="ph-toggle"><input type="checkbox" id="ph-hide"> 영어 가리고 외우기</label>
+    </div>
+    <div class="review-list" id="phrase-list"></div>
+  </section>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -306,7 +327,7 @@ const S = {
 /* ---------- storage: localStorage, mirrored to a private GitHub Gist when a token is set ---------- */
 // stats are kept per device ({deviceId: {a: attempts, t: total score}}) so two devices never overwrite each other's counts
 const DEVICE = (() => { let d = lsGet("ew_device", null); if (!d) { d = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); lsSet("ew_device", d); } return d; })();
-S.deleted = {}; S.dev = {};
+S.deleted = {}; S.dev = {}; S.phrases = []; S.phConfirm = null; S.phHide = false; S.phQuery = "";
 
 function aggregateStats() {
   let a = 0, t = 0;
@@ -314,23 +335,29 @@ function aggregateStats() {
   S.stats.attempts = a; S.stats.total = t;
 }
 function saveLocal() {
-  lsSet("ew_reviews", S.reviews); lsSet("ew_deleted", S.deleted);
+  lsSet("ew_reviews", S.reviews); lsSet("ew_phrases", S.phrases); lsSet("ew_deleted", S.deleted);
   lsSet("ew_stats", { recent: S.stats.recent, dev: S.dev });
 }
-const localData = () => ({ version: 1, reviews: S.reviews, deleted: S.deleted, stats: { recent: S.stats.recent, dev: S.dev }, updatedAt: Date.now() });
+const localData = () => ({ version: 1, reviews: S.reviews, phrases: S.phrases, deleted: S.deleted, stats: { recent: S.stats.recent, dev: S.dev }, updatedAt: Date.now() });
 
 function mergeRemote(rm) {
   if (!rm || typeof rm !== "object") return;
-  const del = Object.assign({}, rm.deleted || {}, S.deleted);
+  const del = Object.assign({}, rm.deleted || {});
+  for (const k in S.deleted) del[k] = Math.max(del[k] || 0, S.deleted[k]);
   const cutoff = Date.now() - 90 * 864e5;
   for (const k in del) if (del[k] < cutoff) delete del[k];
-  const map = new Map();
-  for (const r of [...(rm.reviews || []), ...S.reviews]) {
-    if (!r || !r.id) continue;
-    const o = map.get(r.id);
-    if (!o || (r.lastSeen || 0) > (o.lastSeen || 0)) map.set(r.id, r);
-  }
-  S.reviews = [...map.values()].filter(r => !del[r.id]);
+  // newest copy of each id wins; a tombstone hides anything not saved again after the deletion
+  const mergeList = (a, b) => {
+    const map = new Map();
+    for (const r of [...(a || []), ...(b || [])]) {
+      if (!r || !r.id) continue;
+      const o = map.get(r.id);
+      if (!o || (r.lastSeen || 0) > (o.lastSeen || 0)) map.set(r.id, r);
+    }
+    return [...map.values()].filter(r => !del[r.id] || (r.lastSeen || 0) > del[r.id]);
+  };
+  S.reviews = mergeList(rm.reviews, S.reviews);
+  S.phrases = mergeList(rm.phrases, S.phrases);
   S.deleted = del;
   const rdev = rm.stats?.dev || {};
   for (const k in rdev) if (!S.dev[k] || (rdev[k].a || 0) > (S.dev[k].a || 0)) S.dev[k] = rdev[k];
@@ -341,7 +368,7 @@ function mergeRemote(rm) {
 
 const store = {
   load() {
-    S.reviews = lsGet("ew_reviews", []); S.deleted = lsGet("ew_deleted", {});
+    S.reviews = lsGet("ew_reviews", []); S.phrases = lsGet("ew_phrases", []); S.deleted = lsGet("ew_deleted", {});
     const st = lsGet("ew_stats", {});
     S.stats.recent = st.recent || [];
     S.dev = st.dev || {};
@@ -401,7 +428,7 @@ const sync = {
       await this.gh("/gists/" + id, { method: "PATCH", body: JSON.stringify({ files: { [this.FILE]: { content: JSON.stringify(localData()) } } }) });
       const t = new Date();
       this.status(`동기화됨 · ${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`);
-      renderStats(); renderReviewList();
+      renderStats(); renderReviewList(); renderPhraseList();
     } catch (e) {
       if (e?.status === 404 && retry && lsGet("ew_gist_id", null)) { lsSet("ew_gist_id", null); this.busy = false; return this.run(false); }
       this.status(e?.status === 401 ? "GitHub 토큰이 올바르지 않거나 만료되었습니다. 새 토큰을 넣어 주세요."
@@ -600,11 +627,28 @@ async function generateNew() {
   }
 }
 
+// the exercise on screen survives a reload; only "다음 문제" moves on
+function saveCurrent() { lsSet("ew_current", { current: S.current, graded: S.graded, draft: $("#answer").value }); }
+function restoreCurrent() {
+  const c = lsGet("ew_current", null);
+  if (!c?.current?.item?.lines) return false;
+  S.current = c.current;
+  $("#answer").value = c.draft || "";
+  if (c.graded?.g) {
+    S.graded = c.graded;
+    renderResult(c.graded.g, c.graded.answer, c.graded.note || null);
+    $("#answer").value = c.graded.answer;
+    renderExercise(true); setPhase("graded");
+  } else { renderExercise(false); setPhase("answering"); }
+  return true;
+}
+
 function showFreshExercise() {
   S.graded = null;
   $("#result").hidden = true; $("#result").innerHTML = "";
   $("#answer").value = "";
   renderExercise(false);
+  saveCurrent();
   setPhase("answering");
   $("#answer").focus({ preventScroll: true });
   $("#card").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -680,8 +724,9 @@ async function submit() {
     const score = Math.max(0, Math.min(100, Math.round(Number(g?.score))));
     if (!Number.isFinite(score) || !g?.model_answer) throw { code: "invalid_json" };
     g.score = score;
-    S.graded = { g, answer };
     const note = await recordResult(score, answer, g);
+    S.graded = { g, answer, note };
+    saveCurrent();
     renderResult(g, answer, note);
     setPhase("graded");
     renderExercise(true);
@@ -715,9 +760,81 @@ async function recordResult(score, answer, g) {
     await store.putReview(r);
     note = { kind: "save", text: `${th}점 미만이라 복습 노트에 저장했습니다. 몇 문제 뒤에 다시 나옵니다.` };
   }
+  const added = savePhrases(g, item, answer, now);
+  if (added) note = note ? { ...note, text: note.text + ` 기억할 표현 ${added}개는 표현 노트에 담았습니다.` } : { kind: "pass", text: `기억할 표현 ${added}개를 표현 노트에 담았습니다.` };
   await store.putStats();
-  renderStats(); renderReviewList();
+  renderStats(); renderReviewList(); renderPhraseList();
   return note;
+}
+
+/* ---------- expression notebook ---------- */
+const phraseId = en => "ph_" + String(en).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+function savePhrases(g, item, answer, now) {
+  const t = item.lines.find(l => l.target) || {};
+  let n = 0;
+  for (const x of (g.key_expressions || [])) {
+    if (!x || !x.en) continue;
+    const id = phraseId(x.en);
+    if (id === "ph_") continue;
+    const ex = { ko: t.ko || "", model: g.model_answer || "", mine: answer, situation: item.situation, at: now };
+    const old = S.phrases.find(p => p.id === id);
+    if (old) {
+      old.ko = x.ko || old.ko; old.lastSeen = now; old.count = (old.count || 1) + 1;
+      old.examples = [ex, ...(old.examples || []).filter(e => e.ko !== ex.ko)].slice(0, 3);
+    } else {
+      S.phrases.push({ id, en: String(x.en), ko: String(x.ko || ""), examples: [ex], count: 1, savedAt: now, lastSeen: now });
+      n++;
+    }
+  }
+  if (n || g.key_expressions?.length) saveLocal();
+  return n;
+}
+
+function markIn(sentence, expr) {
+  // highlight the expression inside the example when it appears verbatim
+  const s = String(sentence), e = String(expr).trim();
+  const i = e ? s.toLowerCase().indexOf(e.toLowerCase()) : -1;
+  return i < 0 ? esc(s) : esc(s.slice(0, i)) + `<mark>${esc(s.slice(i, i + e.length))}</mark>` + esc(s.slice(i + e.length));
+}
+
+function renderPhraseList() {
+  $("#ph-count").textContent = S.phrases.length;
+  const box = $("#phrase-list");
+  if (!box) return;
+  if (!S.phrases.length) {
+    box.innerHTML = `<div class="empty">아직 저장된 표현이 없습니다.<br>채점할 때마다 ‘기억할 표현’이 그 문장과 함께 여기에 쌓입니다.</div>`;
+    return;
+  }
+  const q = S.phQuery.trim().toLowerCase();
+  const list = S.phrases.slice().sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
+    .filter(p => !q || [p.en, p.ko, ...(p.examples || []).flatMap(e => [e.ko, e.model])].join(" ").toLowerCase().includes(q));
+  if (!list.length) { box.innerHTML = `<div class="empty">‘${esc(S.phQuery)}’와 맞는 표현이 없습니다.</div>`; return; }
+  box.innerHTML = list.map(p => {
+    const ex = (p.examples || [])[0] || {};
+    const d = new Date(p.lastSeen || p.savedAt || Date.now());
+    const en = S.phHide
+      ? `<button class="ph-reveal" data-reveal="${esc(p.id)}">영어 표현 보기</button><span class="ph-en" hidden>${esc(p.en)}</span>`
+      : `<span class="ph-en">${esc(p.en)}</span>`;
+    return `<div class="rv ph">
+      <div class="rv-top"><span class="tag">${esc(ex.situation || "")}</span>
+        <span>${d.getMonth() + 1}월 ${d.getDate()}일${p.count > 1 ? ` · ${p.count}번 나옴` : ""}</span></div>
+      <div class="ph-head">${en}<span class="ph-ko">${esc(p.ko)}</span></div>
+      ${ex.ko ? `<div class="ph-ex"><p class="rv-ko">${esc(ex.ko)}</p><p class="ph-model"${S.phHide ? " hidden" : ""}>${markIn(ex.model, p.en)}</p></div>` : ""}
+      ${(p.examples || []).length > 1 ? `<details><summary>다른 예문 ${p.examples.length - 1}개</summary>${p.examples.slice(1).map(e => `<p class="rv-ko">${esc(e.ko)}</p><p>${markIn(e.model, p.en)}</p>`).join("")}</details>` : ""}
+      <div class="actions"><button class="btn ghost small" data-phdel="${esc(p.id)}">${S.phConfirm === p.id ? "정말 삭제" : "삭제"}</button></div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-reveal]").forEach(b => b.onclick = () => {
+    const card = b.closest(".ph"); b.hidden = true;
+    card.querySelector(".ph-en").hidden = false;
+    const m = card.querySelector(".ph-model"); if (m) m.hidden = false;
+  });
+  box.querySelectorAll("[data-phdel]").forEach(b => b.onclick = async () => {
+    const id = b.dataset.phdel;
+    if (S.phConfirm !== id) { S.phConfirm = id; renderPhraseList(); return; }
+    S.phConfirm = null; S.phrases = S.phrases.filter(x => x.id !== id);
+    await store.delReview(id); renderPhraseList();
+  });
 }
 
 function scoreColor(s) { return s >= 85 ? "var(--good)" : s >= 65 ? "var(--warn)" : "var(--bad)"; }
@@ -757,7 +874,7 @@ function renderResult(g, answer, note) {
     <div class="actions"><button class="btn primary" id="btn-next2">다음 문제</button><button class="btn" id="btn-retry">같은 문장 다시 쓰기</button></div>`;
   $("#result").hidden = false;
   $("#btn-next2").onclick = next;
-  $("#btn-retry").onclick = () => { $("#result").hidden = true; renderExercise(false); setPhase("answering"); $("#answer").focus(); };
+  $("#btn-retry").onclick = () => { S.graded = null; $("#result").hidden = true; renderExercise(false); saveCurrent(); setPhase("answering"); $("#answer").focus(); };
   $("#btn-copy").onclick = async e => {
     try { await navigator.clipboard.writeText(g.model_answer); e.target.textContent = "복사됨"; }
     catch { const r = document.createRange(); r.selectNodeContents($("#model")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); e.target.textContent = "선택됨 · Ctrl+C"; }
@@ -795,11 +912,14 @@ function renderReviewList() {
 }
 
 function switchTab(t) {
-  $("#tab-practice").setAttribute("aria-selected", t === "practice");
-  $("#tab-review").setAttribute("aria-selected", t === "review");
-  $("#panel-practice").hidden = t !== "practice";
-  $("#panel-review").hidden = t !== "review";
+  for (const name of ["practice", "review", "phrases"]) {
+    $("#tab-" + name).setAttribute("aria-selected", t === name);
+    $("#panel-" + name).hidden = t !== name;
+  }
 }
+$("#tab-phrases").onclick = () => { S.phConfirm = null; renderPhraseList(); switchTab("phrases"); };
+$("#ph-search").addEventListener("input", e => { S.phQuery = e.target.value; renderPhraseList(); });
+$("#ph-hide").onchange = e => { S.phHide = e.target.checked; renderPhraseList(); };
 $("#tab-practice").onclick = () => switchTab("practice");
 $("#tab-review").onclick = () => { S.rvConfirm = null; renderReviewList(); switchTab("review"); };
 
@@ -880,9 +1000,12 @@ S.current = { item: STARTERS[Math.floor(Math.random() * STARTERS.length)], sourc
 store.load(); refreshKey();
 renderSettings(); $("#sel-model").value = S.settings.model;
 renderExercise(false); setPhase("answering");
-renderStats(); renderReviewList();
+renderStats(); renderReviewList(); renderPhraseList();
 if (sync.token()) { $("#gh-input").placeholder = "저장됨 · 바꾸려면 새 토큰 입력"; sync.run(); }
-if (S.sample) generateNew();
+let draftTimer;
+$("#answer").addEventListener("input", () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveCurrent, 500); });
+if (restoreCurrent()) { /* keep the exercise that was on screen */ }
+else if (S.sample) generateNew();
 else setPhase("answering", "API 키를 넣기 전에는 예시 대화로 둘러볼 수 있습니다. 채점과 새 대화에는 키가 필요합니다.");
 </script>
 </body>
